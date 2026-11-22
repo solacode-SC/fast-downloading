@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER commit secrets or cookies)
+.env
+.env.dev
+.env.prod
+.env*.local
+secrets/
+cookies/
+*.cookies.txt
+*.pem
+*.key
+*.priv
+
+# Runtime media / storage / logs
+storage/
+tmp/
+*.part
+*.temp.*
+*.ytdl
+*.log
+npm-debug.log*
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

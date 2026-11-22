@@ -1,0 +1,121 @@
+name: vdl-dev
+
+services:
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - vdl_dev_net
+
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4416/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - vdl_dev_net
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: dev
+    image: vdl-backend:dev
+    env_file:
+      - .env.dev
+    volumes:
+      - ./backend:/app
+      - vdl_dev_downloads:/var/lib/vdl/downloads
+      - vdl_dev_ytdlp_overlay:/var/lib/vdl/ytdlp-overlay
+      - ./secrets/cookies:/run/secrets/cookies:ro
+    tmpfs:
+      - /tmp/vdl:size=512M,mode=1777
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    networks:
+      - vdl_dev_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: dev
+    image: vdl-backend:dev
+    command: ["arq", "app.workers.worker.WorkerSettings"]
+    env_file:
+      - .env.dev
+    volumes:
+      - ./backend:/app
+      - vdl_dev_downloads:/var/lib/vdl/downloads
+      - vdl_dev_ytdlp_overlay:/var/lib/vdl/ytdlp-overlay
+      - ./secrets/cookies:/run/secrets/cookies:ro
+    tmpfs:
+      - /tmp/vdl:size=1G,mode=1777
+    depends_on:
+      redis:
+        condition: service_healthy
+      pot-provider:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import redis; r=redis.from_url(\"redis://redis:6379/0\"); assert r.ping()'"]
+      interval: 20s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    networks:
+      - vdl_dev_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      target: dev
+    image: vdl-frontend:dev
+    env_file:
+      - .env.dev
+    environment:
+      - API_INTERNAL_URL=http://api:8000
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks:
+      - vdl_dev_net
+
+volumes:
+  vdl_dev_downloads:
+  vdl_dev_ytdlp_overlay:
+  vdl_dev_node_modules:
+
+networks:
+  vdl_dev_net:
+    driver: bridge

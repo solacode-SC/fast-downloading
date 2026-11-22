@@ -1,0 +1,7 @@
+# Format: platform|url
+# Curated public, non-DRM test videos for real-world smoke and benchmark checks.
+# Replace any URL if a post is ever deleted by its author.
+youtube|https://www.youtube.com/watch?v=jNQXAC9IVRw
+x|https://x.com/ilanzraee/status/2123872904035365018
+instagram|https://www.instagram.com/reel/Chunk8-jurw/
+facebook|https://www.facebook.com/watch/?v=10153231379946729

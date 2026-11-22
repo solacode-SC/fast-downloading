@@ -1,0 +1,17 @@
+name: Daily Platform Canary
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  canary:
+    name: Resolve Canary URLs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build --target dev -f docker/backend.Dockerfile -t vdl-backend:canary .
+      - name: Run canary checks
+        run: docker run --rm vdl-backend:canary python3 -m app.services.canary

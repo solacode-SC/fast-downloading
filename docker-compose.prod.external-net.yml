@@ -1,0 +1,34 @@
+# Override for VPS deployments with an EXISTING Nginx container on a shared external Docker network.
+# Usage:
+#   make network
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.external-net.yml --env-file .env.prod up -d
+# Publishes ZERO host ports and disables the bundled nginx service.
+
+services:
+  nginx:
+    profiles: ["bundled-nginx-disabled"]
+
+  api:
+    networks:
+      vdl_internal:
+        aliases:
+          - api
+          - fastdl-api
+      external_proxy:
+        aliases:
+          - fastdl-api
+
+  frontend:
+    networks:
+      vdl_internal:
+        aliases:
+          - frontend
+          - fastdl-frontend
+      external_proxy:
+        aliases:
+          - fastdl-frontend
+
+networks:
+  external_proxy:
+    external: true
+    name: ${EXTERNAL_PROXY_NETWORK:-proxy_net}
