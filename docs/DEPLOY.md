@@ -1,8 +1,8 @@
 # Production VPS Deployment Guide (`fastdownloading.solaymanbuilds.com`)
 
 This guide covers deploying and updating FastDL on an Ubuntu VPS (e.g. DigitalOcean Droplet, 2 vCPU / 2–4 GB RAM) in both supported networking modes:
-- **Mode A (Default):** Bundled Nginx container inside this stack exposing ports `80`/`443` with automated Let's Encrypt HTTPS.
-- **Mode B (Shared Host Nginx):** Joins an existing external Docker network (`proxy_net`) and publishes **zero host ports**.
+- **Mode A (Default — Host Nginx + Localhost Bind):** FastDL's bundled Nginx container binds to `127.0.0.1:8088` (so it never conflicts with host ports `80`/`443` used by other sites on the VPS), and the VPS host's Nginx (`/etc/nginx/sites-available/fastdownloading.solaymanbuilds.com`) + `certbot --nginx` serves public HTTPS on `80`/`443`.
+- **Mode B (Shared Docker Nginx Network):** Joins an existing external Docker network (`proxy_net`) and publishes **zero host ports**.
 
 Default production coordinates baked into the automation scripts:
 - **Domain:** `fastdownloading.solaymanbuilds.com`

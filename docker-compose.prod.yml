@@ -192,14 +192,11 @@ services:
     stop_grace_period: 15s
     read_only: true
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
+      - "127.0.0.1:${NGINX_HTTP_PORT:-8088}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - vdl_prod_certbot_www:/var/www/certbot:ro
-      - vdl_prod_letsencrypt:/etc/letsencrypt:ro
     tmpfs:
       - /tmp:size=64M,mode=1777
       - /var/cache/nginx:size=64M,mode=1777
@@ -308,8 +305,6 @@ volumes:
   vdl_prod_redis:
   vdl_prod_downloads:
   vdl_prod_ytdlp_overlay:
-  vdl_prod_certbot_www:
-  vdl_prod_letsencrypt:
   vdl_prod_warp:
   vdl_prod_prometheus:
   vdl_prod_grafana:

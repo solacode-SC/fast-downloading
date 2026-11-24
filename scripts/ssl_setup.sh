@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Automated Let's Encrypt TLS certificate provisioning, Nginx HTTPS activation,
-# and auto-renewal cron installer for FastDL production mode.
+# =====================================================================
+# FastDL Host Nginx Reverse-Proxy & Let's Encrypt Certbot Script
+# Domain : fastdownloading.solaymanbuilds.com
+# Email  : elmouden00den@gmail.com
+# Upstream: http://127.0.0.1:${NGINX_HTTP_PORT:-8088}
+# =====================================================================
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -23,123 +27,142 @@ read_env_var() {
 
 DOMAIN="${DOMAIN:-$(read_env_var DOMAIN "fastdownloading.solaymanbuilds.com")}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-$(read_env_var LETSENCRYPT_EMAIL "elmouden00den@gmail.com")}"
-CERTBOT_STAGING="${CERTBOT_STAGING:-false}"
+APP_PORT="${NGINX_HTTP_PORT:-$(read_env_var NGINX_HTTP_PORT "8088")}"
+NGINX_AVAILABLE="/etc/nginx/sites-available/${DOMAIN}"
+NGINX_ENABLED="/etc/nginx/sites-enabled/${DOMAIN}"
 
-PROD_COMPOSE=(docker compose -p vdl-prod -f docker-compose.prod.yml --env-file .env.prod)
-CERTBOT_WWW_VOL="vdl-prod_vdl_prod_certbot_www"
-LETSENCRYPT_VOL="vdl-prod_vdl_prod_letsencrypt"
-TLS_CONF_PATH="nginx/conf.d/tls.local.conf"
-TLS_TEMPLATE_PATH="nginx/templates/tls.conf.template"
-
-render_tls_conf() {
-  if [ ! -f "$TLS_TEMPLATE_PATH" ]; then
-    echo "ERROR: Missing template $TLS_TEMPLATE_PATH" >&2
-    exit 1
-  fi
-  sed "s/__DOMAIN__/${DOMAIN}/g" "$TLS_TEMPLATE_PATH" > "$TLS_CONF_PATH"
-  echo "Rendered Nginx HTTPS config -> ${TLS_CONF_PATH} (domain: ${DOMAIN})"
-}
-
-reload_nginx() {
-  if "${PROD_COMPOSE[@]}" exec -T nginx nginx -t; then
-    "${PROD_COMPOSE[@]}" exec -T nginx nginx -s reload
-    echo "Nginx configuration validated and reloaded."
+run_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
   else
-    echo "ERROR: Nginx configuration test failed! Rolling back ${TLS_CONF_PATH}..." >&2
-    rm -f "$TLS_CONF_PATH"
-    "${PROD_COMPOSE[@]}" exec -T nginx nginx -s reload || true
+    echo "ERROR: Root or sudo privileges are required to configure host Nginx & Certbot." >&2
     exit 1
   fi
 }
 
-install_renewal_cron() {
-  local cron_cmd="docker run --rm -v ${CERTBOT_WWW_VOL}:/var/www/certbot -v ${LETSENCRYPT_VOL}:/etc/letsencrypt certbot/certbot renew --webroot -w /var/www/certbot --quiet && docker compose -p vdl-prod -f ${ROOT_DIR}/docker-compose.prod.yml --env-file ${ROOT_DIR}/.env.prod exec -T nginx nginx -s reload >/dev/null 2>&1"
-  local cron_schedule="15 3,15 * * *"
-
-  if [ "$(id -u)" -eq 0 ] && [ -d /etc/cron.d ]; then
-    cat > /etc/cron.d/fastdl-certbot <<EOF
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-${cron_schedule} root ${cron_cmd}
-EOF
-    chmod 644 /etc/cron.d/fastdl-certbot
-    echo "Installed system auto-renewal cron job at /etc/cron.d/fastdl-certbot"
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null && [ -d /etc/cron.d ]; then
-    sudo tee /etc/cron.d/fastdl-certbot >/dev/null <<EOF
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-${cron_schedule} root ${cron_cmd}
-EOF
-    sudo chmod 644 /etc/cron.d/fastdl-certbot
-    echo "Installed system auto-renewal cron job at /etc/cron.d/fastdl-certbot"
-  elif command -v crontab >/dev/null 2>&1; then
-    local existing_cron
-    existing_cron="$(crontab -l 2>/dev/null | grep -v 'vdl-prod_vdl_prod_letsencrypt' || true)"
-    printf "%s\n%s %s\n" "$existing_cron" "$cron_schedule" "$cron_cmd" | sed '/^$/d' | crontab -
-    echo "Installed user crontab entry for twice-daily Let's Encrypt renewal."
-  else
-    echo "NOTE: cron is not installed; run 'make ssl-renew' periodically to renew certificates."
+ensure_host_nginx_and_certbot() {
+  if ! command -v nginx >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
+    echo "Installing host nginx, certbot, and python3-certbot-nginx..."
+    run_root apt-get update -y
+    run_root apt-get install -y nginx certbot python3-certbot-nginx
   fi
+  run_root systemctl enable --now nginx
+}
+
+configure_host_nginx_vhost() {
+  echo "Configuring host Nginx reverse proxy for ${DOMAIN} -> http://127.0.0.1:${APP_PORT}..."
+  run_root mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+  run_root tee "$NGINX_AVAILABLE" >/dev/null <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    client_max_body_size 128k;
+
+    # Server-Sent Events (SSE) live download progress: unbuffered
+    location ~ ^/api/v1/jobs/[^/]+/events\$ {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+        chunked_transfer_encoding on;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    # Media file downloads: Range streaming & zero temp disk buffering
+    location ^~ /api/v1/files/ {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Range \$http_range;
+        proxy_set_header If-Range \$http_if_range;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_max_temp_file_size 0;
+        gzip off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 120s;
+    }
+}
+EOF
+
+  run_root ln -sf "$NGINX_AVAILABLE" "$NGINX_ENABLED"
+  run_root nginx -t
+  run_root systemctl reload nginx
+  echo "Host Nginx reverse proxy configured and reloaded."
 }
 
 case "$ACTION" in
   issue)
-    echo "=== FastDL Let's Encrypt TLS Provisioning ==="
-    echo "Domain : ${DOMAIN}"
-    echo "Email  : ${LETSENCRYPT_EMAIL}"
+    echo "=== FastDL Host Nginx & Let's Encrypt TLS Setup ==="
+    echo "Domain   : ${DOMAIN}"
+    echo "Email    : ${LETSENCRYPT_EMAIL}"
+    echo "Upstream : http://127.0.0.1:${APP_PORT}"
     echo ""
 
-    # Ensure nginx is running so HTTP-01 challenge on port 80 works
-    if ! docker ps --format '{{.Names}}' | grep -q '^vdl-prod-nginx'; then
-      echo "Starting vdl-prod stack on HTTP first for ACME challenge..."
-      "${PROD_COMPOSE[@]}" up -d
-    fi
+    ensure_host_nginx_and_certbot
+    configure_host_nginx_vhost
 
-    STAGING_ARGS=()
-    if [ "$CERTBOT_STAGING" = "true" ]; then
-      STAGING_ARGS=(--staging)
-      echo "Using Let's Encrypt STAGING environment..."
-    fi
-
-    docker run --rm \
-      -v "${CERTBOT_WWW_VOL}:/var/www/certbot" \
-      -v "${LETSENCRYPT_VOL}:/etc/letsencrypt" \
-      certbot/certbot certonly --webroot \
-      -w /var/www/certbot \
-      -d "$DOMAIN" \
-      --email "$LETSENCRYPT_EMAIL" \
+    echo "Requesting/updating Let's Encrypt certificate via certbot --nginx..."
+    if run_root certbot --nginx \
+      -d "${DOMAIN}" \
+      --non-interactive \
       --agree-tos \
       --no-eff-email \
-      --non-interactive \
-      --keep-until-expiring \
-      "${STAGING_ARGS[@]}"
+      -m "${LETSENCRYPT_EMAIL}" \
+      --redirect \
+      --keep-until-expiring; then
+      echo "SSL certificate installed and HTTPS redirect enabled for ${DOMAIN}!"
+    else
+      echo "WARNING: Certbot could not issue the SSL certificate yet." >&2
+      echo "Ensure DNS A record for ${DOMAIN} points to this VPS IP, then re-run: make ssl-setup" >&2
+      exit 1
+    fi
 
-    render_tls_conf
-    reload_nginx
-    install_renewal_cron
-    echo ""
+    run_root systemctl enable --now certbot.timer >/dev/null 2>&1 || true
+    run_root systemctl reload nginx
     echo "HTTPS is live at: https://${DOMAIN}"
     ;;
 
   renew)
     echo "=== Renewing Let's Encrypt TLS Certificates ==="
-    docker run --rm \
-      -v "${CERTBOT_WWW_VOL}:/var/www/certbot" \
-      -v "${LETSENCRYPT_VOL}:/etc/letsencrypt" \
-      certbot/certbot renew --webroot -w /var/www/certbot
-    if [ -f "$TLS_CONF_PATH" ]; then
-      reload_nginx
-    fi
-    ;;
-
-  enable-existing)
-    # Renders tls.local.conf and reloads Nginx if certificates already exist in the volume
-    render_tls_conf
-    reload_nginx
+    run_root certbot renew --quiet
+    run_root systemctl reload nginx
+    echo "Certificates renewed and host Nginx reloaded."
     ;;
 
   *)
-    echo "Usage: $0 {issue|renew|enable-existing}" >&2
+    echo "Usage: $0 {issue|renew}" >&2
     exit 1
     ;;
 esac

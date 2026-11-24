@@ -137,6 +137,11 @@ if ! (IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" build --pull || IMAGE
   rollback_on_failure
 fi
 
+# Remove any failed vdl-prod-nginx container from an earlier port-80 conflict before recreating
+if [ "$NETWORK_MODE" = "bundled" ] && docker ps -a --format '{{.Names}} {{.Status}}' | grep '^vdl-prod-nginx' | grep -qv 'Up'; then
+  docker rm -f vdl-prod-nginx-1 >/dev/null 2>&1 || true
+fi
+
 if ! IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait; then
   rollback_on_failure
 fi
@@ -157,8 +162,8 @@ fi
 # ------------------------------------------------------------------
 log_step "5/5 Verifying updated services and cleaning dangling images..."
 
-NGINX_HTTP_PORT="$(grep -E '^NGINX_HTTP_PORT=' .env.prod 2>/dev/null | head -n1 | cut -d= -f2- || echo "80")"
-HEALTH_URL="http://127.0.0.1:${NGINX_HTTP_PORT:-80}"
+NGINX_HTTP_PORT="$(grep -E '^NGINX_HTTP_PORT=' .env.prod 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\r' || echo "8088")"
+HEALTH_URL="http://127.0.0.1:${NGINX_HTTP_PORT:-8088}"
 
 if [ "$NETWORK_MODE" = "bundled" ]; then
   if ! curl -fsS "${HEALTH_URL}/healthz" >/dev/null; then

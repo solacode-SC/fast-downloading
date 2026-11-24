@@ -73,6 +73,13 @@ if grep -qE "^CORS_ORIGINS=https://dl\.yourdomain\.com" .env.prod; then
   set_or_append_env .env.prod "CORS_ORIGINS" "https://${ACTIVE_DOMAIN}"
 fi
 
+# Migrate legacy NGINX_HTTP_PORT=80 to 8088 so bundled Nginx binds 127.0.0.1:8088
+# and never conflicts with the VPS host Nginx on port 80/443.
+if grep -qE "^NGINX_HTTP_PORT=80$" .env.prod; then
+  set_or_append_env .env.prod "NGINX_HTTP_PORT" "8088"
+  echo "Updated NGINX_HTTP_PORT=8088 in .env.prod (avoids host port 80 conflict)"
+fi
+
 # Auto-generate strong HMAC_SECRET if placeholder is still present
 if grep -q "REPLACE_WITH_OPENSSL_RAND_HEX_32" .env.prod; then
   if command -v openssl >/dev/null 2>&1; then
