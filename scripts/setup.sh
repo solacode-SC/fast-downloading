@@ -80,6 +80,12 @@ if grep -qE "^NGINX_HTTP_PORT=80$" .env.prod; then
   echo "Updated NGINX_HTTP_PORT=8088 in .env.prod (avoids host port 80 conflict)"
 fi
 
+# Migrate legacy YOUTUBE_PLAYER_CLIENTS ordering in .env.prod
+if grep -qE "^YOUTUBE_PLAYER_CLIENTS=default,web_safari,tv,mweb,android_vr$" .env.prod; then
+  set_or_append_env .env.prod "YOUTUBE_PLAYER_CLIENTS" "default,mweb,android_vr,web_safari,ios,web_embedded,tv"
+  echo "Updated YOUTUBE_PLAYER_CLIENTS ordering in .env.prod"
+fi
+
 # Auto-generate strong HMAC_SECRET if placeholder is still present
 if grep -q "REPLACE_WITH_OPENSSL_RAND_HEX_32" .env.prod; then
   if command -v openssl >/dev/null 2>&1; then

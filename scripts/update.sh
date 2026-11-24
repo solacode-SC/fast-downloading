@@ -145,6 +145,8 @@ fi
 if ! IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait; then
   rollback_on_failure
 fi
+# Ensure Cloudflare WARP sidecar is started for datacenter IP anti-block fallback (non-fatal if kernel lacks tun)
+IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" --profile warp up -d warp >/dev/null 2>&1 || true
 
 # Reload Nginx config if bundled Nginx is running
 if [ "$NETWORK_MODE" = "bundled" ] && docker ps --format '{{.Names}}' | grep -q '^vdl-prod-nginx'; then

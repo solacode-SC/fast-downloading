@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import socket
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -79,6 +80,15 @@ def is_aria2c_available() -> bool:
     return shutil.which("aria2c") is not None
 
 
+def _detect_internal_warp_proxy() -> ProxyEntry | None:
+    """Detect if the optional internal Cloudflare WARP SOCKS5 container (warp:1080) is reachable."""
+    try:
+        with socket.create_connection(("warp", 1080), timeout=0.15):
+            return ProxyEntry(url="socks5h://warp:1080", label="warp:1080")
+    except OSError:
+        return None
+
+
 class MediaExtractor:
     """
     Executes yt-dlp resolve and download operations safely in worker threads with:
@@ -121,36 +131,52 @@ class MediaExtractor:
         primary_proxy = self._proxies.select(platform, sticky_key=sticky_key)
         exclude_set = {primary_proxy.url} if primary_proxy else set()
         backup_proxy = self._proxies.select(platform, sticky_key=f"{sticky_key}:alt", exclude=exclude_set)
+        if backup_proxy is None and primary_proxy is None:
+            backup_proxy = _detect_internal_warp_proxy()
 
         if platform == Platform.YOUTUBE:
             clients = self._settings.youtube_client_list or [
                 "default",
-                "web_safari",
-                "tv",
                 "mweb",
                 "android_vr",
+                "web_safari",
+                "ios",
+                "web_embedded",
+                "tv",
             ]
             # Step 1: iterate player_clients on primary proxy (or direct)
-            for idx, client in enumerate(clients[:4]):
+            active_clients = clients[:6]
+            for idx, client in enumerate(active_clients):
                 plans.append(
                     AttemptPlan(
                         player_client=client,
                         proxy=primary_proxy,
-                        use_cookies=(cookie_available and idx == len(clients[:4]) - 1),
-                        use_impersonate=(impersonate_default and client in {"web_safari", "web", "mweb"}),
+                        use_cookies=(cookie_available and idx == len(active_clients) - 1),
+                        use_impersonate=(impersonate_default and client in {"web", "mweb", "web_embedded"}),
                     )
                 )
-            # Step 2: if backup proxy exists, retry best client on backup proxy
+            # Step 2: if backup proxy (or WARP sidecar) exists, retry best clients on backup proxy
             if backup_proxy is not None:
+                for b_client in active_clients[:2]:
+                    plans.append(
+                        AttemptPlan(
+                            player_client=b_client,
+                            proxy=backup_proxy,
+                            use_cookies=cookie_available,
+                            use_impersonate=(impersonate_default and b_client in {"web", "mweb", "web_embedded"}),
+                        )
+                    )
+            # Step 3: if primary_proxy was configured and failed, also allow direct fallback
+            elif primary_proxy is not None:
                 plans.append(
                     AttemptPlan(
-                        player_client=clients[0],
-                        proxy=backup_proxy,
+                        player_client=active_clients[0],
+                        proxy=None,
                         use_cookies=cookie_available,
-                        use_impersonate=impersonate_default,
+                        use_impersonate=False,
                     )
                 )
-            # Step 3: if cookies exist and haven't been tried with web client yet
+            # Step 4: if cookies exist and haven't been tried with web client yet
             if cookie_available and not any(p.use_cookies and p.player_client == "web" for p in plans):
                 plans.append(
                     AttemptPlan(
@@ -241,11 +267,7 @@ class MediaExtractor:
             if plan.player_client and plan.player_client != "default":
                 extractor_args["youtube"] = {"player_client": [plan.player_client]}
 
-            if (
-                self._settings.pot_provider_enabled
-                and self._settings.pot_provider_url
-                and plan.player_client != "default"
-            ):
+            if self._settings.pot_provider_enabled and self._settings.pot_provider_url:
                 extractor_args["youtubepot-bgutilhttp"] = {"base_url": [self._settings.pot_provider_url]}
 
         if extractor_args:
@@ -386,10 +408,8 @@ class MediaExtractor:
                     self._cookies.mark_expired(platform)
                 if plan.proxy and is_proxy_failure(err):
                     self._proxies.record_failure(platform, plan.proxy.url)
-                if err.code in {ErrorCode.RATE_LIMITED, ErrorCode.BOT_CHECK}:
-                    await self._cb.record_failure(platform, proxy_label)
                 can_rotate_client = (
-                    platform == Platform.YOUTUBE and err.code == ErrorCode.UNSUPPORTED and idx < len(plans) - 1
+                    err.code in {ErrorCode.UNSUPPORTED, ErrorCode.EXTRACTION_FAILED} and idx < len(plans) - 1
                 )
                 if not err.retryable and not can_rotate_client:
                     raise err from exc
@@ -403,11 +423,6 @@ class MediaExtractor:
                     status_code=422,
                 )
                 continue
-
-            # Success! Record health
-            if plan.proxy:
-                self._proxies.record_success(platform, plan.proxy.url)
-            await self._cb.record_success(platform, proxy_label)
 
             # Check playlist/carousel entries
             is_playlist, is_carousel, entries = parse_entries(info, max_items=self._settings.max_playlist_items)
@@ -423,14 +438,22 @@ class MediaExtractor:
                 self._check_media_constraints(target_info)
 
             formats = parse_formats(target_info)
-            # For YouTube, if client returned zero formats (common on soft-blocked client), try next client
-            if platform == Platform.YOUTUBE and not is_playlist and not formats and idx < len(plans) - 1:
+            # If attempt returned zero formats (common on soft-blocked client), rotate to next plan
+            if not is_playlist and not formats and idx < len(plans) - 1:
                 logger.info(
-                    "YouTube client %s returned 0 formats; rotating to next client",
-                    plan.player_client,
+                    "Attempt %d/%d on %s (client=%s) returned 0 formats; rotating to next plan",
+                    idx + 1,
+                    len(plans),
+                    platform.value,
+                    plan.player_client or "default",
                     extra={"platform": platform.value},
                 )
                 continue
+
+            # Success! Record health
+            if plan.proxy:
+                self._proxies.record_success(platform, plan.proxy.url)
+            await self._cb.record_success(platform, proxy_label)
 
             presets = build_presets(formats)
             subtitles = parse_subtitles(target_info)
@@ -459,6 +482,9 @@ class MediaExtractor:
                 cached=False,
                 resolve_ms=elapsed_ms,
             )
+
+        if last_error is not None and last_error.code == ErrorCode.RATE_LIMITED:
+            await self._cb.record_failure(platform, "direct")
 
         raise last_error or AppError(
             code=ErrorCode.EXTRACTION_FAILED,
@@ -629,10 +655,8 @@ class MediaExtractor:
                     self._cookies.mark_expired(platform)
                 if plan.proxy and is_proxy_failure(err):
                     self._proxies.record_failure(platform, plan.proxy.url)
-                if err.code in {ErrorCode.RATE_LIMITED, ErrorCode.BOT_CHECK}:
-                    await self._cb.record_failure(platform, proxy_label)
                 can_rotate_client = (
-                    platform == Platform.YOUTUBE and err.code == ErrorCode.UNSUPPORTED and idx < len(plans) - 1
+                    err.code in {ErrorCode.UNSUPPORTED, ErrorCode.EXTRACTION_FAILED} and idx < len(plans) - 1
                 )
                 if not err.retryable and not can_rotate_client:
                     raise err from exc
@@ -688,6 +712,9 @@ class MediaExtractor:
                 subtitle_path=sub_path,
                 thumbnail_path=thumb_path,
             )
+
+        if last_error is not None and last_error.code == ErrorCode.RATE_LIMITED:
+            await self._cb.record_failure(platform, "direct")
 
         raise last_error or AppError(
             code=ErrorCode.EXTRACTION_FAILED,

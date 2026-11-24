@@ -17,7 +17,17 @@ _PLATFORM_HOSTS: dict[Platform, tuple[str, ...]] = {
 
 # Restrict yt-dlp to only the extractors needed for the 4 supported platforms (defense in depth)
 ALLOWED_YTDLP_EXTRACTORS: dict[Platform, list[str]] = {
-    Platform.YOUTUBE: ["youtube", "youtube:tab", "youtube:playlist", "youtube:shorts"],
+    Platform.YOUTUBE: [
+        "youtube",
+        "youtube:tab",
+        "youtube:playlist",
+        "youtube:shorts",
+        "youtube:clip",
+        "youtube:consent",
+        "YoutubeYtBe",
+        "YoutubeLivestreamEmbed",
+        "generic",
+    ],
     Platform.X: [
         "twitter",
         "twitter:card",
@@ -25,9 +35,24 @@ ALLOWED_YTDLP_EXTRACTORS: dict[Platform, list[str]] = {
         "twitter:broadcast",
         "twitter:spaces",
         "twitter:shortener",
+        "generic",
     ],
-    Platform.INSTAGRAM: ["instagram", "instagram:story", "instagram:reel"],
-    Platform.FACEBOOK: ["facebook", "facebook:reel", "facebook:ads"],
+    Platform.INSTAGRAM: [
+        "instagram",
+        "Instagram",
+        "instagram:story",
+        "instagram:reel",
+        "InstagramIOS",
+        "generic",
+    ],
+    Platform.FACEBOOK: [
+        "facebook",
+        "facebook:reel",
+        "facebook:ads",
+        "FacebookPluginsVideo",
+        "FacebookRedirectURL",
+        "generic",
+    ],
 }
 
 _TRACKING_PARAMS = frozenset(
@@ -120,8 +145,24 @@ def normalize_url(url: str, platform: Platform) -> str:
         return urlunparse(("https", host, clean_path, "", "", ""))
 
     if platform == Platform.FACEBOOK:
+        # Unwrap Facebook login or external link wrapper query params (?next=... or ?u=...)
+        if path.rstrip("/") in {"/login", "/login.php"} and "next" in query_dict and query_dict["next"]:
+            inner = query_dict["next"][0]
+            if inner.startswith(("http://", "https://")) and detect_platform(inner) == Platform.FACEBOOK:
+                return normalize_url(inner, Platform.FACEBOOK)
+        if path.rstrip("/") == "/flx/warn" and "u" in query_dict and query_dict["u"]:
+            inner = query_dict["u"][0]
+            if inner.startswith(("http://", "https://")) and detect_platform(inner) == Platform.FACEBOOK:
+                return normalize_url(inner, Platform.FACEBOOK)
+
         if host in {"m.facebook.com", "facebook.com", "web.facebook.com"}:
             host = "www.facebook.com"
+        if path.startswith("/reels/"):
+            path = "/reel/" + path[len("/reels/") :]
+        watch_id_match = re.match(r"^/watch/(\d+)/?$", path)
+        if watch_id_match:
+            path = "/watch/"
+            cleaned_query["v"] = [watch_id_match.group(1)]
         return urlunparse(("https", host, path, "", urlencode(cleaned_query, doseq=True), ""))
 
     return urlunparse(("https", host, path, "", urlencode(cleaned_query, doseq=True), ""))

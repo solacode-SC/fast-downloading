@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     # Anti-block L3: YouTube PO Token & player clients
     pot_provider_url: str = "http://pot-provider:4416"
     pot_provider_enabled: bool = True
-    youtube_player_clients: str = "default,web_safari,tv,mweb,android_vr"
+    youtube_player_clients: str = "default,mweb,android_vr,web_safari,ios,web_embedded,tv"
 
     # Anti-block L4: Cookies
     cookies_dir: Path = Path("/run/secrets/cookies")

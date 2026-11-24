@@ -54,6 +54,10 @@ services:
   pot-provider:
     image: brainicism/bgutil-ytdlp-pot-provider:latest
     restart: unless-stopped
+    environment:
+      - HOME=/tmp
+    tmpfs:
+      - /tmp:size=128M,mode=1777
     <<: [*hardened]
     logging: *default-logging
     deploy:

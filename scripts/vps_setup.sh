@@ -155,6 +155,8 @@ fi
 # Skip rebuilding if images already exist and BUILD_IF_MISSING is not forced, or build cleanly
 IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" build --pull || IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" build
 IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --wait
+# Optionally start Cloudflare WARP sidecar for datacenter IP anti-block fallback (non-fatal if kernel lacks tun)
+IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" --profile warp up -d warp >/dev/null 2>&1 || true
 
 log_ok "All FastDL production containers are up and healthy on 127.0.0.1:${APP_PORT}."
 

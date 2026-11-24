@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
 
@@ -183,6 +183,36 @@ async def assert_dns_safe(hostname: str) -> list[str]:
     return ips
 
 
+def _is_redirect_or_share_url(hostname: str, path: str) -> bool:
+    """Return True if the URL is a known shortener or platform /share/ redirect link."""
+    if any(hostname == dom or hostname.endswith(f".{dom}") for dom in SHORTENER_DOMAINS):
+        return True
+    if (hostname == "facebook.com" or hostname.endswith(".facebook.com")) and (
+        path.startswith("/share/") or path.rstrip("/") in {"/login", "/login.php", "/flx/warn"}
+    ):
+        return True
+    return (hostname == "instagram.com" or hostname.endswith(".instagram.com")) and path.startswith("/share/")
+
+
+def _unwrap_login_redirect(url: str) -> str | None:
+    """If Facebook redirects a public share/video link to /login/?next=..., extract the inner target URL."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not (host == "facebook.com" or host.endswith(".facebook.com")):
+        return None
+    path = parsed.path.rstrip("/")
+    q = parse_qs(parsed.query, keep_blank_values=False)
+    if path in {"/login", "/login.php"} and q.get("next"):
+        candidate = q["next"][0].strip()
+        if candidate.startswith(("http://", "https://")):
+            return candidate
+    if path == "/flx/warn" and q.get("u"):
+        candidate = q["u"][0].strip()
+        if candidate.startswith(("http://", "https://")):
+            return candidate
+    return None
+
+
 async def validate_and_resolve_url(
     raw_url: str,
     *,
@@ -192,30 +222,44 @@ async def validate_and_resolve_url(
 ) -> str:
     """
     Validate URL against allowlist and DNS rules.
-    If the URL is a known short link (t.co, fb.watch, instagr.am, youtu.be), follow
-    redirects manually hop-by-hop, re-validating hostname allowlist and DNS IPs on every hop.
+    If the URL is a known short link (t.co, fb.watch, instagr.am, youtu.be) or platform
+    share link (facebook.com/share/..., instagram.com/share/...), follow redirects manually
+    hop-by-hop, re-validating hostname allowlist and DNS IPs on every hop.
     """
     current_url = validate_url_syntax(raw_url)
+    unwrapped = _unwrap_login_redirect(current_url)
+    if unwrapped:
+        current_url = validate_url_syntax(unwrapped)
+
     parsed = urlparse(current_url)
     hostname = (parsed.hostname or "").lower().rstrip(".")
+    path = parsed.path or "/"
     await assert_dns_safe(hostname)
 
-    is_shortener = any(hostname == dom or hostname.endswith(f".{dom}") for dom in SHORTENER_DOMAINS)
-    if not follow_short_links or not is_shortener:
+    if not follow_short_links or not _is_redirect_or_share_url(hostname, path):
         return current_url
 
     # youtu.be doesn't need an HTTP round-trip; yt-dlp and our normalizer handle it natively
     if hostname == "youtu.be" or hostname.endswith(".youtu.be"):
         return current_url
 
+    is_fb = hostname in {"fb.watch", "fb.com", "fb.gg"} or hostname == "facebook.com" or hostname.endswith(".facebook.com")
+    user_agent = (
+        "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+        if is_fb
+        else (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        )
+    )
+
     client_kwargs: dict[str, object] = {
         "follow_redirects": False,
         "timeout": timeout_seconds,
         "headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            )
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
         },
     }
     if proxy:
@@ -224,9 +268,12 @@ async def validate_and_resolve_url(
     async with httpx.AsyncClient(**client_kwargs) as client:  # type: ignore[arg-type]
         for _ in range(MAX_REDIRECT_HOPS):
             try:
-                resp = await client.head(current_url)
-                if resp.status_code in {405, 403, 400}:
+                if is_fb:
                     resp = await client.get(current_url)
+                else:
+                    resp = await client.head(current_url)
+                    if resp.status_code in {405, 403, 400}:
+                        resp = await client.get(current_url)
             except httpx.HTTPError:
                 # Fall back to the already-validated URL if shortener blocks HEAD/GET
                 return current_url
@@ -239,12 +286,17 @@ async def validate_and_resolve_url(
                 return current_url
 
             next_url = urljoin(current_url, location)
+            unwrapped_next = _unwrap_login_redirect(next_url)
+            if unwrapped_next:
+                next_url = unwrapped_next
+
             current_url = validate_url_syntax(next_url)
-            next_host = (urlparse(current_url).hostname or "").lower().rstrip(".")
+            next_parsed = urlparse(current_url)
+            next_host = (next_parsed.hostname or "").lower().rstrip(".")
+            next_path = next_parsed.path or "/"
             await assert_dns_safe(next_host)
 
-            still_short = any(next_host == dom or next_host.endswith(f".{dom}") for dom in SHORTENER_DOMAINS)
-            if not still_short:
+            if not _is_redirect_or_share_url(next_host, next_path):
                 return current_url
 
     return current_url

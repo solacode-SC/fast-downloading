@@ -19,7 +19,9 @@ dependencies = [
     "prometheus-client>=0.21.0,<1.0.0",
     "sentry-sdk[fastapi]>=2.18.0,<3.0.0",
     "yt-dlp[default,curl-cffi]>=2025.1.15",
+    "yt-dlp-ejs>=0.8.0",
     "bgutil-ytdlp-pot-provider>=0.7.0",
+    "deno>=2.3.0",
 ]
 
 [project.optional-dependencies]

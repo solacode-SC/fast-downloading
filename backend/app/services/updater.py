@@ -81,7 +81,7 @@ def update_ytdlp_with_rollback(settings: Settings) -> dict[str, Any]:
         pkg_spec = f"yt-dlp=={settings.ytdlp_pinned_version}"
     elif settings.ytdlp_channel == "nightly":
         pip_cmd.append("--pre")
-    pip_cmd.append(pkg_spec)
+    pip_cmd.extend([pkg_spec, "yt-dlp-ejs"])
 
     shutil.rmtree(staging_dir, ignore_errors=True)
     staging_dir.mkdir(parents=True, exist_ok=True)
