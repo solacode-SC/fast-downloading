@@ -21,6 +21,7 @@ out/
 .env.dev
 .env.prod
 .env*.local
+nginx/conf.d/*.local.conf
 secrets/
 cookies/
 *.cookies.txt

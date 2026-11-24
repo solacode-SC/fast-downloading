@@ -179,21 +179,26 @@ curl -s http://localhost:8000/readyz | jq
 Dev and prod never collide — they use separate compose files, project names (`vdl-dev` vs `vdl-prod`), `.env` files, volumes, and networks:
 
 ```bash
-# 1. Configure .env.prod (set CORS_ORIGINS=https://dl.yourdomain.com, optional PROXY_URLS)
-make setup
+# One-command turnkey VPS setup for fastdownloading.solaymanbuilds.com (elmouden00den@gmail.com)
+# Installs Docker if missing, generates .env.prod secrets, builds images, starts stack,
+# issues Let's Encrypt HTTPS cert, enables TLS in Nginx, and installs auto-renewal cron:
+make vps-setup
 
-# 2. Build immutable non-root production images & launch behind bundled Nginx
-make prod-build
-make prod-up
-make prod-ps
+# Pull latest git changes, sync .env.prod, rebuild, rolling update, & auto-rollback on failure:
+make update
 ```
 
+- **Manual step-by-step production launch:**
+  ```bash
+  make setup
+  make prod-build
+  make prod-up
+  make ssl-setup
+  make prod-ps
+  ```
 - **Plugging into an Existing Host Nginx (`proxy_net` — Zero Published Host Ports):**
   ```bash
-  docker compose -p vdl-prod \
-    -f docker-compose.prod.yml \
-    -f docker-compose.prod.external-net.yml \
-    --env-file .env.prod up -d
+  make vps-setup-external
   ```
   See [docs/DEPLOY.md](docs/DEPLOY.md) and [nginx/conf.d/external-proxy-snippet.conf](nginx/conf.d/external-proxy-snippet.conf) for full Let's Encrypt TLS instructions.
 
@@ -316,10 +321,14 @@ Run `make` or `make help` for colored self-documenting targets:
 | **Development** | `make dev` / `make dev-d` | Build and start `vdl-dev` stack (attached or detached) on `localhost:3000` & `:8000` |
 | **Development** | `make dev-logs` / `make dev-down` | Follow live `vdl-dev` logs or stop the development stack |
 | **Development** | `make dev-shell-api` / `make dev-shell-web` | Open an interactive shell inside the backend or frontend dev container |
+| **Production** | `make vps-setup` | Turnkey VPS setup (`fastdownloading.solaymanbuilds.com` + Let's Encrypt HTTPS + auto-renew cron) |
+| **Production** | `make vps-setup-external` | Turnkey VPS setup on shared external `proxy_net` (zero published host ports) |
+| **Production** | `make ssl-setup` / `make ssl-renew` | Issue or renew Let's Encrypt certificate for `fastdownloading.solaymanbuilds.com` and reload Nginx |
+| **Production** | `make update` / `make prod-update` | Pull latest git code, sync `.env.prod`, rebuild, rolling update, & auto-rollback on failure |
 | **Production** | `make prod-build` | Build immutable production images (`vdl-backend:latest`, `vdl-frontend:latest`) |
 | **Production** | `make prod-up` / `make prod-down` | Start or stop the hardened `vdl-prod` stack |
 | **Production** | `make prod-restart` / `make prod-ps` | Rolling restart with healthcheck wait, or inspect production container health |
-| **Production** | `make deploy` / `make rollback` | Tag `:previous`, pull, build, deploy, prune, & run smoke — or roll back to `:previous` |
+| **Production** | `make deploy` / `make rollback` | Run `make update --smoke` with 4-platform verification — or roll back to `:previous` |
 | **Verification** | `make test` / `make test-int` | Run 68 backend unit tests + Vitest suite, or full FastAPI + Redis + Worker integration tests |
 | **Verification** | `make lint` / `make format` | Run `ruff`, `mypy --strict`, `tsc --noEmit`, `eslint`, and `prettier` |
 | **Verification** | `make audit` | Run `pip-audit` and `npm audit --audit-level=high` (0 vulnerabilities) |

@@ -1,10 +1,13 @@
 .DEFAULT_GOAL := help
 SHELL := /usr/bin/env bash
 
-DEV_COMPOSE   := docker compose -p vdl-dev -f docker-compose.dev.yml --env-file .env.dev
-PROD_COMPOSE  := docker compose -p vdl-prod -f docker-compose.prod.yml --env-file .env.prod
-EXTERNAL_NET  ?= proxy_net
-API_BASE_URL  ?= http://127.0.0.1:8000
+DEV_COMPOSE      := docker compose -p vdl-dev -f docker-compose.dev.yml --env-file .env.dev
+PROD_COMPOSE     := docker compose -p vdl-prod -f docker-compose.prod.yml --env-file .env.prod
+PROD_EXT_COMPOSE := docker compose -p vdl-prod -f docker-compose.prod.yml -f docker-compose.prod.external-net.yml --env-file .env.prod
+EXTERNAL_NET     ?= proxy_net
+API_BASE_URL     ?= http://127.0.0.1:8000
+DOMAIN           ?= fastdownloading.solaymanbuilds.com
+LETSENCRYPT_EMAIL?= elmouden00den@gmail.com
 
 CYAN  := \033[36m
 GREEN := \033[32m
@@ -13,17 +16,19 @@ RESET := \033[0m
 
 .PHONY: help setup network \
         dev dev-d dev-down dev-logs dev-restart dev-shell-api dev-shell-web \
-        prod-build prod-up prod-down prod-restart prod-logs prod-ps deploy rollback \
+        vps-setup vps-setup-external ssl-setup ssl-renew \
+        prod-build prod-up prod-up-external prod-down prod-restart prod-logs prod-ps \
+        update prod-update deploy rollback \
         test test-int lint format audit smoke bench update-ytdlp cookies-check clean nuke
 
 help: ## List all targets with descriptions
 	@echo -e "$(GREEN)FastDL — Production Video Downloader Makefile$(RESET)"
-	@echo -e "Dev project: $(CYAN)vdl-dev$(RESET) | Prod project: $(CYAN)vdl-prod$(RESET)"
+	@echo -e "Dev project: $(CYAN)vdl-dev$(RESET) | Prod project: $(CYAN)vdl-prod$(RESET) | Domain: $(CYAN)$(DOMAIN)$(RESET)"
 	@echo ""
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 setup: ## Copy .env examples, create secrets/cookies dir & external network
-	@bash scripts/setup.sh
+	@DOMAIN="$(DOMAIN)" LETSENCRYPT_EMAIL="$(LETSENCRYPT_EMAIL)" bash scripts/setup.sh
 	@$(MAKE) network
 
 network: ## Create the external docker proxy network if missing
@@ -58,13 +63,30 @@ dev-shell-web: ## Open interactive shell inside frontend dev container
 # ------------------------------------------------------------------
 # Production targets (vdl-prod)
 # ------------------------------------------------------------------
+vps-setup: ## Turnkey VPS setup: Docker, .env.prod, build, start & Let's Encrypt HTTPS (fastdownloading.solaymanbuilds.com)
+	@DOMAIN="$(DOMAIN)" LETSENCRYPT_EMAIL="$(LETSENCRYPT_EMAIL)" bash scripts/vps_setup.sh
+
+vps-setup-external: ## Turnkey VPS setup for shared external proxy_net (zero host ports)
+	@DOMAIN="$(DOMAIN)" LETSENCRYPT_EMAIL="$(LETSENCRYPT_EMAIL)" NETWORK_MODE=external bash scripts/vps_setup.sh
+
+ssl-setup: ## Issue Let's Encrypt cert (fastdownloading.solaymanbuilds.com / elmouden00den@gmail.com), enable HTTPS & cron
+	@DOMAIN="$(DOMAIN)" LETSENCRYPT_EMAIL="$(LETSENCRYPT_EMAIL)" bash scripts/ssl_setup.sh issue
+
+ssl-renew: ## Renew Let's Encrypt TLS certificates and reload Nginx
+	@bash scripts/ssl_setup.sh renew
+
 prod-build: ## Build production images (with --pull when registry reachable)
 	@$(PROD_COMPOSE) build --pull || $(PROD_COMPOSE) build || \
 	  (docker image inspect vdl-backend:latest >/dev/null 2>&1 && docker image inspect vdl-frontend:latest >/dev/null 2>&1 && echo "Using locally built vdl-backend:latest and vdl-frontend:latest images.")
 
-prod-up: ## Start production stack detached
-	@$(PROD_COMPOSE) up -d
+prod-up: ## Start production stack detached (bundled Nginx)
+	@$(PROD_COMPOSE) up -d --wait
 	@echo -e "$(GREEN)Prod stack started. Run 'make prod-ps' to inspect health.$(RESET)"
+
+prod-up-external: ## Start production stack attached to external proxy_net (no host ports)
+	@$(MAKE) network
+	@$(PROD_EXT_COMPOSE) up -d --wait
+	@echo -e "$(GREEN)Prod stack started on external network '$(EXTERNAL_NET)'.$(RESET)"
 
 prod-down: ## Stop production stack
 	@$(PROD_COMPOSE) down
@@ -78,20 +100,13 @@ prod-logs: ## Follow production logs
 prod-ps: ## Show status and health of production services
 	@$(PROD_COMPOSE) ps
 
-deploy: ## Pull latest code, tag previous image, build, deploy, prune, and run smoke
-	@set -e; \
-	CURRENT_TAG=$$(git rev-parse --short HEAD 2>/dev/null || echo "latest"); \
-	if docker image inspect vdl-backend:latest >/dev/null 2>&1; then \
-		docker tag vdl-backend:latest vdl-backend:previous; \
-	fi; \
-	if docker image inspect vdl-frontend:latest >/dev/null 2>&1; then \
-		docker tag vdl-frontend:latest vdl-frontend:previous; \
-	fi; \
-	git pull --ff-only || true; \
-	IMAGE_TAG=latest $(PROD_COMPOSE) build --pull; \
-	IMAGE_TAG=latest $(PROD_COMPOSE) up -d --wait; \
-	docker image prune -f; \
-	API_BASE_URL=http://127.0.0.1:$${NGINX_HTTP_PORT:-80} bash scripts/smoke.sh
+update: ## Pull latest git commits, sync .env.prod, rebuild, rolling update & auto-rollback on failure
+	@bash scripts/update.sh
+
+prod-update: update ## Alias for 'make update'
+
+deploy: ## Pull latest code, update production stack, prune, and run 4-platform smoke tests
+	@bash scripts/update.sh --smoke
 
 rollback: ## Redeploy the previous production image tag
 	@set -e; \
