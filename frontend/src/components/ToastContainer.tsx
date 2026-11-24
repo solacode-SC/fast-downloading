@@ -18,7 +18,10 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   if (toasts.length === 0) return null;
 
   return (
-    <div aria-live="assertive" className="fixed bottom-4 end-4 z-50 flex max-w-sm flex-col gap-3">
+    <div
+      aria-live="assertive"
+      className="fixed inset-x-3 bottom-3 z-50 flex flex-col gap-3 sm:inset-x-auto sm:bottom-5 sm:end-5 sm:w-full sm:max-w-sm"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -27,15 +30,17 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             toast.variant === "error" ? "bg-brutal-pink text-black" : "bg-brutal-lime text-black"
           }`}
         >
-          <div className="space-y-1">
-            <p className="font-black uppercase">{toast.title}</p>
-            {toast.hint && <p className="text-[11px] font-medium">{toast.hint}</p>}
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="break-words font-black uppercase leading-snug">{toast.title}</p>
+            {toast.hint && (
+              <p className="break-words text-[11px] font-medium leading-relaxed">{toast.hint}</p>
+            )}
           </div>
           <button
             type="button"
             onClick={() => onDismiss(toast.id)}
             aria-label="Dismiss notification"
-            className="border-2 border-black bg-white px-1.5 py-0.5 font-black text-black shadow-brutal-sm hover:bg-black hover:text-white"
+            className="shrink-0 border-2 border-black bg-white px-2 py-0.5 font-black text-black shadow-brutal-sm hover:bg-black hover:text-white"
           >
             ✕
           </button>

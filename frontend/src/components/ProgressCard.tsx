@@ -47,29 +47,56 @@ export function ProgressCard({ job, onCancel, onRetry }: ProgressCardProps) {
       : job.error.hint
     : "";
 
+  const statusBadgeClass =
+    job.status === "failed"
+      ? "bg-black text-brutal-pink"
+      : job.status === "ready"
+        ? "bg-brutal-lime text-black"
+        : job.status === "cancelled"
+          ? "bg-zinc-200 text-black"
+          : "bg-brutal-purple text-white";
+
+  const pctBadgeClass =
+    job.status === "failed"
+      ? "bg-brutal-pink text-black"
+      : job.status === "cancelled"
+        ? "bg-zinc-200 text-black"
+        : "bg-brutal-lime text-black";
+
+  const hasBytes = job.downloaded_bytes > 0;
+  const showTelemetryRow = isActive || hasBytes;
+
   return (
     <section
       aria-label="Download progress"
       aria-live="polite"
-      className="border-2 border-black bg-brutal-pink p-3 shadow-brutal"
+      className="border-2 border-black bg-brutal-pink p-2.5 shadow-brutal sm:p-3"
     >
-      <div className="border-2 border-black bg-white p-4 dark:bg-[#16161F]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="border-2 border-black bg-white p-3.5 sm:p-4 dark:bg-[#16161F]">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="border-2 border-black bg-brutal-purple px-2 py-0.5 font-mono text-[10px] font-black uppercase text-white">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`border-2 border-black px-2 py-0.5 font-mono text-[10px] font-black uppercase ${statusBadgeClass}`}
+              >
                 {statusText[job.status]}
               </span>
               <span className="font-mono text-[11px] font-bold uppercase text-zinc-600 dark:text-zinc-300">
                 {localizedPlatform}
               </span>
             </div>
-            <p className="mt-2 truncate font-sans text-base font-black uppercase tracking-tight text-black dark:text-zinc-100">
+            <p
+              dir="auto"
+              className="mt-2 truncate font-sans text-sm font-black uppercase tracking-tight text-black sm:text-base dark:text-zinc-100"
+            >
               {job.filename || job.title || job.url}
             </p>
           </div>
 
-          <span className="border-2 border-black bg-brutal-lime px-3 py-1 font-mono text-sm font-black text-black shadow-brutal-sm">
+          <span
+            dir="ltr"
+            className={`shrink-0 border-2 border-black px-3 py-1 font-mono text-sm font-black shadow-brutal-sm ${pctBadgeClass}`}
+          >
             {pct}%
           </span>
         </div>
@@ -82,65 +109,85 @@ export function ProgressCard({ job, onCancel, onRetry }: ProgressCardProps) {
           aria-valuemax={100}
           className="mt-4 h-5 w-full overflow-hidden border-2 border-black bg-zinc-100 dark:bg-zinc-800"
         >
-          <div
-            className={`h-full border-e-2 border-black transition-all duration-300 ${
-              job.status === "failed"
-                ? "bg-brutal-pink"
-                : job.status === "ready"
-                  ? "bg-brutal-lime"
-                  : "bg-brutal-purple"
-            }`}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-
-        {/* Live Telemetry */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="border border-black bg-zinc-100 px-2 py-0.5 font-bold text-black">
-              {formatBytes(job.downloaded_bytes)}
-              {job.total_bytes ? ` / ${formatBytes(job.total_bytes)}` : ""}
-            </span>
-            {isActive && job.speed_bytes_per_sec && (
-              <span className="border border-black bg-brutal-lime px-2 py-0.5 font-bold text-black">
-                {t("speed")}: {formatSpeed(job.speed_bytes_per_sec)}
-              </span>
-            )}
-            {isActive && job.eta_seconds != null && (
-              <span className="border border-black bg-white px-2 py-0.5 font-bold text-black">
-                {t("eta")}: {formatEta(job.eta_seconds)}
-              </span>
-            )}
-          </div>
-
-          {isActive && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="border-2 border-black bg-white px-3 py-1 font-mono text-xs font-black uppercase text-black shadow-brutal-sm transition hover:bg-brutal-pink"
-            >
-              {t("cancel")} ✕
-            </button>
+          {isActive && pct === 0 ? (
+            <div className="h-full w-1/4 animate-pulse border-e-2 border-black bg-brutal-purple/75" />
+          ) : (
+            <div
+              className={`h-full transition-all duration-300 ${
+                pct > 0 && pct < 100 ? "border-e-2 border-black" : ""
+              } ${
+                job.status === "failed"
+                  ? "bg-brutal-pink"
+                  : job.status === "ready"
+                    ? "bg-brutal-lime"
+                    : "bg-brutal-purple"
+              }`}
+              style={{ width: `${pct}%` }}
+            />
           )}
         </div>
+
+        {/* Live Telemetry (hidden when failed/cancelled at 0 bytes so no empty '—' box renders) */}
+        {showTelemetryRow && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              {hasBytes ? (
+                <span
+                  dir="ltr"
+                  className="border border-black bg-zinc-100 px-2 py-0.5 font-bold text-black"
+                >
+                  {formatBytes(job.downloaded_bytes)}
+                  {job.total_bytes ? ` / ${formatBytes(job.total_bytes)}` : ""}
+                </span>
+              ) : (
+                <span className="border border-black bg-zinc-100 px-2 py-0.5 font-bold text-black">
+                  {statusText[job.status]}...
+                </span>
+              )}
+              {isActive && job.speed_bytes_per_sec && (
+                <span className="border border-black bg-brutal-lime px-2 py-0.5 font-bold text-black">
+                  {t("speed")}: <span dir="ltr">{formatSpeed(job.speed_bytes_per_sec)}</span>
+                </span>
+              )}
+              {isActive && job.eta_seconds != null && (
+                <span className="border border-black bg-white px-2 py-0.5 font-bold text-black">
+                  {t("eta")}: <span dir="ltr">{formatEta(job.eta_seconds)}</span>
+                </span>
+              )}
+            </div>
+
+            {isActive && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="border-2 border-black bg-white px-3 py-1 font-mono text-xs font-black uppercase text-black shadow-brutal-sm transition hover:bg-brutal-pink"
+              >
+                {t("cancel")} ✕
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Error Alert */}
         {job.status === "failed" && job.error && (
           <div
             role="alert"
-            className="mt-4 border-2 border-black bg-brutal-pink p-3 font-mono text-xs text-black shadow-brutal-sm"
+            className="mt-4 border-2 border-black bg-brutal-pink p-3.5 font-mono text-xs text-black shadow-brutal-sm"
           >
-            <p className="font-black uppercase">
-              [{job.error.code}] {localizedErrMsg}
+            <p className="break-words font-black uppercase leading-snug">
+              <span dir="ltr">[{job.error.code}]</span> {localizedErrMsg}
             </p>
-            {localizedErrHint && <p className="mt-1 font-medium">{localizedErrHint}</p>}
+            {localizedErrHint && (
+              <p className="mt-1 break-words font-medium leading-relaxed">{localizedErrHint}</p>
+            )}
             {job.error.retryable && onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
-                className="mt-2.5 border-2 border-black bg-brutal-lime px-3 py-1.5 font-mono text-xs font-black uppercase text-black shadow-brutal-sm hover:translate-x-[1px] hover:translate-y-[1px]"
+                className="mt-3 inline-flex items-center gap-1.5 border-2 border-black bg-brutal-lime px-3.5 py-1.5 font-mono text-xs font-black uppercase text-black shadow-brutal-sm transition hover:translate-y-[1px] hover:shadow-none"
               >
-                {t("retry")} ↻
+                <span>{t("retry")}</span>
+                <span aria-hidden="true">↻</span>
               </button>
             )}
           </div>
@@ -152,11 +199,13 @@ export function ProgressCard({ job, onCancel, onRetry }: ProgressCardProps) {
             <a
               href={job.download_url}
               download={job.filename || undefined}
-              className="inline-flex items-center gap-2 border-2 border-black bg-brutal-lime px-5 py-2.5 font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm"
+              className="inline-flex items-center gap-2 border-2 border-black bg-brutal-lime px-5 py-2.5 font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-y-[2px] hover:shadow-brutal-sm ltr:hover:translate-x-[2px] rtl:hover:-translate-x-[2px]"
             >
-              <span>
-                {t("saveFile")} {job.filesize_bytes ? `(${formatBytes(job.filesize_bytes)})` : ""} ↓
-              </span>
+              <span>{t("saveFile")}</span>
+              {job.filesize_bytes ? (
+                <span dir="ltr">({formatBytes(job.filesize_bytes)})</span>
+              ) : null}
+              <span aria-hidden="true">↓</span>
             </a>
 
             {job.subtitle_url && (

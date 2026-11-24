@@ -6,6 +6,12 @@ import { useI18n, type Locale } from "@/lib/i18n";
 
 type ThemeMode = "system" | "light" | "dark";
 
+const LOCALE_OPTIONS: { code: Locale; label: string }[] = [
+  { code: "en", label: "EN" },
+  { code: "fr", label: "FR" },
+  { code: "ar", label: "عربي" },
+];
+
 export function Header() {
   const { locale, setLocale, t } = useI18n();
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -41,74 +47,99 @@ export function Header() {
 
   const themeLabel =
     theme === "dark" ? t("themeDark") : theme === "light" ? t("themeLight") : t("themeSystem");
+  const themeIcon = theme === "dark" ? "☾" : theme === "light" ? "☀" : "◐";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b-2 border-black bg-white dark:bg-[#16161F]">
-      <div className="flex w-full flex-wrap items-stretch justify-between">
-        {/* Top-left Acid Lime Brand Block */}
+      <div className="flex w-full flex-nowrap items-stretch justify-between">
+        {/* Brand Block */}
         <Link
           href="/"
-          className="flex items-center gap-2 border-e-2 border-black bg-brutal-lime px-4 py-3.5 font-mono text-sm font-black uppercase tracking-wider text-black transition hover:bg-[#a6e600] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black sm:px-7 sm:text-base"
+          className="flex shrink-0 items-center gap-1.5 border-e-2 border-black bg-brutal-lime px-3 py-3 font-mono text-xs font-black uppercase tracking-wider text-black transition hover:bg-[#a6e600] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black sm:gap-2 sm:px-6 sm:py-3.5 sm:text-base"
         >
-          <span>&lt;/&gt;</span>
-          <span>{t("appName")}</span>
+          <span dir="ltr">&lt;/&gt;</span>
+          <span dir="ltr">{t("appName")}</span>
         </Link>
 
-        {/* Center Navigation Links (Tablet & Desktop) */}
+        {/* Center Navigation Links (Wide Desktop >=1280px so FR/AR never wrap) */}
         <nav
           aria-label="Primary navigation"
-          className="hidden items-center gap-6 px-6 font-mono text-xs font-bold uppercase tracking-wider text-black md:flex lg:gap-10 lg:text-sm dark:text-zinc-100"
+          className="hidden items-center gap-5 px-4 font-mono text-xs font-bold uppercase tracking-wider text-black xl:flex 2xl:gap-8 2xl:px-6 2xl:text-sm dark:text-zinc-100"
         >
-          <Link href="/" className="hover:underline underline-offset-4">
+          <Link href="/" className="whitespace-nowrap underline-offset-4 hover:underline">
             {t("navDownloader")}
           </Link>
-          <a href="#platforms-strip" className="hover:underline underline-offset-4">
+          <a
+            href="#platforms-strip"
+            className="whitespace-nowrap underline-offset-4 hover:underline"
+          >
             {t("navPlatforms")}
           </a>
-          <a href="#workspace-section" className="hover:underline underline-offset-4">
+          <a
+            href="#workspace-section"
+            className="whitespace-nowrap underline-offset-4 hover:underline"
+          >
             {t("navInspector")}
           </a>
-          <a href="#pipeline-section" className="hover:underline underline-offset-4">
+          <a
+            href="#pipeline-section"
+            className="whitespace-nowrap underline-offset-4 hover:underline"
+          >
             {t("navPipeline")}
           </a>
-          <Link href="/legal" className="hover:underline underline-offset-4">
+          <Link href="/legal" className="whitespace-nowrap underline-offset-4 hover:underline">
             {t("legalLink")}
           </Link>
-          <Link href="/dmca" className="hover:underline underline-offset-4">
+          <Link href="/dmca" className="whitespace-nowrap underline-offset-4 hover:underline">
             {t("dmcaLink")}
           </Link>
         </nav>
 
-        {/* Controls + Right Electric Purple Action Block */}
-        <div className="ms-auto flex items-stretch">
-          <div className="flex items-center gap-2 border-s-2 border-black px-3 py-2 sm:px-4">
-            <label htmlFor="locale-select" className="sr-only">
-              Language
-            </label>
-            <select
-              id="locale-select"
-              value={locale}
-              onChange={(e) => setLocale(e.target.value as Locale)}
-              className="border-2 border-black bg-white px-2 py-1 font-mono text-xs font-bold uppercase text-black shadow-brutal-sm focus:outline-none dark:bg-zinc-900 dark:text-zinc-100"
+        {/* Segmented Language Switcher + Theme Toggle + Public-Only Pill */}
+        <div className="ms-auto flex shrink-0 items-stretch">
+          <div className="flex items-center gap-1.5 border-s-2 border-black px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2">
+            <div
+              role="group"
+              aria-label="Language selector"
+              dir="ltr"
+              className="inline-flex items-stretch border-2 border-black bg-white shadow-brutal-sm dark:bg-zinc-900"
             >
-              <option value="en">EN</option>
-              <option value="fr">FR</option>
-              <option value="ar">العربية</option>
-            </select>
+              {LOCALE_OPTIONS.map((opt, idx) => {
+                const active = locale === opt.code;
+                return (
+                  <button
+                    key={opt.code}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setLocale(opt.code)}
+                    className={`px-2 py-1 text-[11px] font-black transition sm:px-2.5 sm:text-xs ${
+                      idx > 0 ? "border-l-2 border-black" : ""
+                    } ${
+                      active
+                        ? "bg-brutal-lime text-black"
+                        : "bg-white text-black hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
 
             <button
               type="button"
               onClick={cycleTheme}
               aria-label={`Switch theme (current: ${themeLabel})`}
-              className="border-2 border-black bg-brutal-pink px-2.5 py-1 font-mono text-xs font-bold uppercase text-black shadow-brutal-sm transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
+              className="inline-flex items-center gap-1 border-2 border-black bg-brutal-pink px-2 py-1 font-mono text-[11px] font-bold uppercase text-black shadow-brutal-sm transition hover:translate-y-[1px] hover:shadow-none sm:px-2.5 sm:text-xs"
             >
-              {themeLabel}
+              <span aria-hidden="true">{themeIcon}</span>
+              <span className="hidden xs:inline sm:inline">{themeLabel}</span>
             </button>
           </div>
 
           <Link
             href="/legal"
-            className="hidden items-center gap-2 border-s-2 border-black bg-brutal-purple px-5 py-3.5 font-mono text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#684de6] sm:flex lg:px-7"
+            className="hidden items-center gap-2 whitespace-nowrap border-s-2 border-black bg-brutal-purple px-4 py-3.5 font-mono text-xs font-black uppercase tracking-wider text-white transition hover:bg-[#684de6] md:flex lg:px-6"
           >
             <span>{t("publicOnly")}</span>
             <span aria-hidden="true">{locale === "ar" ? "←" : "→"}</span>
@@ -116,24 +147,36 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mobile Sub-Navigation Strip (<768px) */}
+      {/* Sub-Navigation Strip (<1280px: Mobile, Tablet, Compact Laptop) */}
       <nav
-        aria-label="Mobile quick navigation"
-        className="flex w-full items-center justify-around overflow-x-auto border-t-2 border-black bg-zinc-50 px-2 py-2 font-mono text-[11px] font-black uppercase text-black md:hidden dark:bg-zinc-900 dark:text-zinc-100"
+        aria-label="Quick navigation"
+        className="flex w-full items-center justify-start gap-4 overflow-x-auto border-t-2 border-black bg-zinc-50 px-3 py-2 font-mono text-[11px] font-black uppercase text-black sm:justify-around sm:gap-2 xl:hidden dark:bg-zinc-900 dark:text-zinc-100"
       >
-        <Link href="/" className="px-2 py-0.5 hover:underline">
+        <Link href="/" className="shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline">
           {t("mobileHome")}
         </Link>
-        <a href="#platforms-strip" className="px-2 py-0.5 hover:underline">
+        <a
+          href="#platforms-strip"
+          className="shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline"
+        >
           {t("navPlatforms")}
         </a>
-        <a href="#workspace-section" className="px-2 py-0.5 hover:underline">
+        <a
+          href="#workspace-section"
+          className="shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline"
+        >
           {t("mobileFormats")}
         </a>
-        <Link href="/legal" className="px-2 py-0.5 hover:underline">
+        <a
+          href="#pipeline-section"
+          className="hidden shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline sm:inline-block"
+        >
+          {t("navPipeline")}
+        </a>
+        <Link href="/legal" className="shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline">
           {t("legalLink")}
         </Link>
-        <Link href="/dmca" className="px-2 py-0.5 hover:underline">
+        <Link href="/dmca" className="shrink-0 whitespace-nowrap px-1.5 py-0.5 hover:underline">
           {t("dmcaLink")}
         </Link>
       </nav>

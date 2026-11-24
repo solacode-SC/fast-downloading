@@ -6,6 +6,7 @@ import asyncio
 import logging
 import shutil
 import socket
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yt_dlp
+import yt_dlp.extractor.youtube.pot.utils as _yt_pot_utils
 
 from app.config import Settings
 from app.errors import AppError, ErrorCode, classify_ytdlp_error, is_auth_failure, is_proxy_failure
@@ -45,6 +47,7 @@ class AttemptPlan:
     proxy: ProxyEntry | None
     use_cookies: bool
     use_impersonate: bool
+    skip_webpage: bool = False
 
 
 @dataclass
@@ -78,6 +81,43 @@ def is_curl_cffi_available() -> bool:
 
 def is_aria2c_available() -> bool:
     return shutil.which("aria2c") is not None
+
+
+def _enable_extended_pot_clients() -> None:
+    """
+    Allow bgutil-ytdlp-pot-provider to mint PLAYER and GVS PO tokens for mobile/VR
+    InnerTube clients (ANDROID_VR, ANDROID, IOS, VISIONOS) in addition to WEBPO_CLIENTS.
+    Must run before yt-dlp lazily imports yt_dlp_plugins.extractor.getpot_bgutil.
+    """
+    extended = tuple(dict.fromkeys((*_yt_pot_utils.WEBPO_CLIENTS, "ANDROID_VR", "ANDROID", "IOS", "VISIONOS")))
+    if set(_yt_pot_utils.WEBPO_CLIENTS) >= {"ANDROID_VR", "ANDROID", "IOS", "VISIONOS"}:
+        return
+
+    orig_binding = _yt_pot_utils.get_webpo_content_binding
+
+    def _patched_content_binding(
+        request: Any,
+        webpo_clients: Any = extended,
+        bind_to_visitor_id: bool = False,
+    ) -> Any:
+        return orig_binding(request, webpo_clients=extended, bind_to_visitor_id=bind_to_visitor_id)
+
+    _yt_pot_utils.WEBPO_CLIENTS = extended
+    _yt_pot_utils.get_webpo_content_binding = _patched_content_binding
+
+    bgutil_mod: Any = sys.modules.get("yt_dlp_plugins.extractor.getpot_bgutil")
+    if bgutil_mod is not None and hasattr(bgutil_mod, "BgUtilPTPBase"):
+        bgutil_mod.BgUtilPTPBase._SUPPORTED_CLIENTS = extended
+
+    bgutil_http_mod: Any = sys.modules.get("yt_dlp_plugins.extractor.getpot_bgutil_http")
+    if bgutil_http_mod is not None:
+        if hasattr(bgutil_http_mod, "BgUtilHTTPPTP"):
+            bgutil_http_mod.BgUtilHTTPPTP._SUPPORTED_CLIENTS = extended
+        if hasattr(bgutil_http_mod, "get_webpo_content_binding"):
+            bgutil_http_mod.get_webpo_content_binding = _patched_content_binding
+
+
+_enable_extended_pot_clients()
 
 
 def _detect_internal_warp_proxy() -> ProxyEntry | None:
@@ -136,13 +176,13 @@ class MediaExtractor:
 
         if platform == Platform.YOUTUBE:
             clients = self._settings.youtube_client_list or [
-                "default",
-                "mweb",
                 "android_vr",
+                "mweb",
+                "tv_simply",
                 "web_safari",
                 "ios",
                 "web_embedded",
-                "tv",
+                "default",
             ]
             # Step 1: iterate player_clients on primary proxy (or direct)
             active_clients = clients[:6]
@@ -153,8 +193,20 @@ class MediaExtractor:
                         proxy=primary_proxy,
                         use_cookies=(cookie_available and idx == len(active_clients) - 1),
                         use_impersonate=(impersonate_default and client in {"web", "mweb", "web_embedded"}),
+                        skip_webpage=False,
                     )
                 )
+                # Add a webpage-less InnerTube fallback right after android_vr in case /watch HTML is challenged
+                if client == "android_vr" and idx == 0:
+                    plans.append(
+                        AttemptPlan(
+                            player_client="android_vr",
+                            proxy=primary_proxy,
+                            use_cookies=False,
+                            use_impersonate=False,
+                            skip_webpage=True,
+                        )
+                    )
             # Step 2: if backup proxy (or WARP sidecar) exists, retry best clients on backup proxy
             if backup_proxy is not None:
                 for b_client in active_clients[:2]:
@@ -264,11 +316,20 @@ class MediaExtractor:
 
         extractor_args: dict[str, dict[str, list[str]]] = {}
         if platform == Platform.YOUTUBE:
+            yt_args: dict[str, list[str]] = {}
             if plan.player_client and plan.player_client != "default":
-                extractor_args["youtube"] = {"player_client": [plan.player_client]}
+                yt_args["player_client"] = [plan.player_client]
 
             if self._settings.pot_provider_enabled and self._settings.pot_provider_url:
+                yt_args["fetch_pot"] = ["always"]
+                if plan.skip_webpage:
+                    yt_args["player_skip"] = ["webpage", "configs"]
+                else:
+                    yt_args["webpage_skip"] = ["player_response"]
                 extractor_args["youtubepot-bgutilhttp"] = {"base_url": [self._settings.pot_provider_url]}
+
+            if yt_args:
+                extractor_args["youtube"] = yt_args
 
         if extractor_args:
             opts["extractor_args"] = extractor_args

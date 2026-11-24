@@ -243,7 +243,9 @@ async def validate_and_resolve_url(
     if hostname == "youtu.be" or hostname.endswith(".youtu.be"):
         return current_url
 
-    is_fb = hostname in {"fb.watch", "fb.com", "fb.gg"} or hostname == "facebook.com" or hostname.endswith(".facebook.com")
+    is_fb = (
+        hostname in {"fb.watch", "fb.com", "fb.gg"} or hostname == "facebook.com" or hostname.endswith(".facebook.com")
+    )
     user_agent = (
         "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
         if is_fb

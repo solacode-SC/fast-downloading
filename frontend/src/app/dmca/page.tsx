@@ -45,9 +45,9 @@ export default function DmcaPage() {
             </div>
             <p
               dir="ltr"
-              className="mt-6 inline-block self-start border-2 border-black bg-white px-4 py-2 font-mono text-sm font-black shadow-brutal-sm"
+              className="mt-6 inline-block self-start break-all border-2 border-black bg-white px-4 py-2 font-mono text-xs font-black shadow-brutal-sm sm:text-sm"
             >
-              dmca@example.com
+              elmouden00den@gmail.com
             </p>
           </section>
         </div>

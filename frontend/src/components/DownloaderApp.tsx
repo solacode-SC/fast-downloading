@@ -249,6 +249,13 @@ export function DownloaderApp() {
     ? t(`platform_${currentPlatKey}_name`)
     : t("codeAutoDetect");
 
+  const formatsSummary = media
+    ? `${media.formats.length} ${t("codeStreamsUnit")}`
+    : t("codeDefaultFormats");
+  const speedSummary = activeJob?.speed_bytes_per_sec
+    ? formatSpeed(activeJob.speed_bytes_per_sec)
+    : t("codeDefaultSpeed");
+
   return (
     <div className="flex min-h-[calc(100vh-56px)] w-full flex-col">
       {/* =================================================================
@@ -259,13 +266,17 @@ export function DownloaderApp() {
         className="grid w-full grid-cols-1 border-b-2 border-black lg:min-h-[54vh] lg:grid-cols-12"
       >
         {/* Left Hero Column */}
-        <div className="bg-grid-paper flex flex-col justify-between border-b-2 border-black p-5 sm:p-8 md:p-10 lg:col-span-7 lg:border-b-0 lg:border-e-2 xl:p-14">
-          <div className="space-y-5 xl:space-y-6">
-            <div className="inline-flex items-center gap-2 border-2 border-black bg-brutal-purple px-3 py-1 font-mono text-[11px] font-black uppercase tracking-wider text-white shadow-brutal-sm sm:text-xs">
-              <span>{t("heroPill")}</span>
+        <div className="bg-grid-paper flex flex-col justify-between border-b-2 border-black p-4 sm:p-8 md:p-10 lg:col-span-7 lg:border-b-0 lg:border-e-2 xl:p-14">
+          <div className="space-y-4 sm:space-y-5 xl:space-y-6">
+            <div className="inline-flex max-w-full items-center gap-2 border-2 border-black bg-brutal-purple px-3 py-1 font-mono text-[11px] font-black uppercase leading-snug tracking-wider text-white shadow-brutal-sm sm:text-xs">
+              <span className="break-words">{t("heroPill")}</span>
             </div>
 
-            <h1 className="font-sans text-3xl font-black uppercase leading-[1.02] tracking-tight text-black sm:text-5xl md:text-6xl xl:text-7xl dark:text-zinc-50">
+            <h1
+              className={`break-words font-sans text-3xl font-black uppercase tracking-tight text-black sm:text-4xl md:text-5xl 2xl:text-6xl dark:text-zinc-50 ${
+                locale === "ar" ? "leading-[1.32]" : "leading-[1.06]"
+              }`}
+            >
               {t("heroTitleLine1")}
               <br />
               {t("heroTitleLine2")}
@@ -287,9 +298,10 @@ export function DownloaderApp() {
                 Video URL
               </label>
               <div className="flex flex-col border-2 border-black bg-white shadow-brutal sm:flex-row sm:items-stretch dark:bg-zinc-900">
-                <div className="flex flex-1 items-stretch">
+                <div className="flex min-w-0 flex-1 items-stretch">
                   {detectedPlatform && (
                     <span
+                      dir="ltr"
                       className={`flex shrink-0 items-center border-e-2 border-black px-3 font-mono text-xs font-black uppercase ${PLATFORM_META[detectedPlatform].badgeClass}`}
                     >
                       {PLATFORM_META[detectedPlatform].code}
@@ -316,7 +328,7 @@ export function DownloaderApp() {
                       setUrlInput("");
                       setMedia(null);
                     }}
-                    className="border-t-2 border-black bg-zinc-100 px-4 py-2.5 font-mono text-xs font-black uppercase text-black hover:bg-brutal-pink sm:border-t-0 sm:border-s-2"
+                    className="shrink-0 border-t-2 border-black bg-zinc-100 px-4 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-pink sm:border-s-2 sm:border-t-0"
                   >
                     {t("clear")}
                   </button>
@@ -324,19 +336,19 @@ export function DownloaderApp() {
                   <button
                     type="button"
                     onClick={() => void handlePaste()}
-                    className="border-t-2 border-black bg-brutal-pink px-5 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-lime sm:border-t-0 sm:border-s-2"
+                    className="shrink-0 border-t-2 border-black bg-brutal-pink px-5 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-lime sm:border-s-2 sm:border-t-0"
                   >
                     {t("paste")}
                   </button>
                 )}
               </div>
 
-              {/* Dual Hero Buttons */}
-              <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
+              {/* Balanced 2-Column Hero CTA Buttons */}
+              <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
                 <button
                   type="submit"
                   disabled={resolving || quickDownloading || !urlInput.trim()}
-                  className="inline-flex w-full items-center justify-center gap-2 border-2 border-black bg-brutal-lime px-6 py-3.5 font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:text-sm"
+                  className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 border-2 border-black bg-brutal-lime px-4 py-3 text-center font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-y-[2px] hover:shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:text-sm ltr:hover:translate-x-[2px] rtl:hover:-translate-x-[2px]"
                 >
                   <span>{resolving ? t("analyzing") : t("analyzeFormatsBtn")}</span>
                 </button>
@@ -345,7 +357,7 @@ export function DownloaderApp() {
                   type="button"
                   disabled={resolving || quickDownloading || !urlInput.trim()}
                   onClick={() => void handleQuickDownload()}
-                  className="inline-flex w-full items-center justify-center gap-2 border-2 border-black bg-white px-6 py-3.5 font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-brutal-pink hover:shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:text-sm"
+                  className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 border-2 border-black bg-white px-4 py-3 text-center font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-y-[2px] hover:bg-brutal-pink hover:shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:text-sm ltr:hover:translate-x-[2px] rtl:hover:-translate-x-[2px]"
                 >
                   <span>{quickDownloading ? t("starting") : t("quickDownloadBtn")}</span>
                 </button>
@@ -353,24 +365,35 @@ export function DownloaderApp() {
             </form>
           </div>
 
-          {/* Bottom-left Platform Icon Boxes */}
-          <div className="mt-8 space-y-2.5">
-            <p className="font-mono text-[10px] font-black uppercase tracking-widest text-zinc-600 sm:text-xs dark:text-zinc-400">
+          {/* Bottom-left Platform Badges */}
+          <div className="mt-7 space-y-2.5 sm:mt-8">
+            <p className="font-mono text-[11px] font-black uppercase tracking-widest text-zinc-600 sm:text-xs dark:text-zinc-400">
               {t("supportedPlatformsLabel")}
             </p>
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
               {(["youtube", "x", "instagram", "facebook"] as const).map((p) => {
                 const active = detectedPlatform === p;
                 return (
-                  <div
+                  <button
                     key={p}
+                    type="button"
+                    onClick={() => {
+                      const inputEl = document.getElementById("video-url-input");
+                      inputEl?.focus();
+                    }}
                     title={t(`platform_${p}_name`)}
-                    className={`flex h-10 px-3 items-center justify-center border-2 border-black font-mono text-xs font-black shadow-brutal-sm transition sm:h-11 ${
-                      active ? "bg-brutal-lime text-black" : "bg-white text-black"
+                    className={`flex h-10 items-center justify-center gap-1.5 border-2 border-black px-3 font-mono text-xs font-black shadow-brutal-sm transition sm:h-11 ${
+                      active ? "bg-brutal-lime text-black" : "bg-white text-black hover:bg-zinc-50"
                     }`}
                   >
-                    {t(`platform_${p}_name`)}
-                  </div>
+                    <span
+                      dir="ltr"
+                      className="border border-black bg-black px-1.5 py-0.5 text-[10px] text-white"
+                    >
+                      {PLATFORM_META[p].code}
+                    </span>
+                    <span>{t(`platform_${p}_name`)}</span>
+                  </button>
                 );
               })}
             </div>
@@ -378,13 +401,13 @@ export function DownloaderApp() {
         </div>
 
         {/* Right Hero Column */}
-        <div className="relative flex min-h-[340px] flex-col items-center justify-center bg-brutal-pink p-6 sm:p-10 lg:col-span-5 xl:p-14">
+        <div className="relative flex min-h-[340px] flex-col items-center justify-center bg-brutal-pink p-5 sm:p-10 lg:col-span-5 xl:p-12">
           <div className="relative w-full max-w-sm xl:max-w-md">
             <div
               aria-hidden="true"
-              className="translate-x-2.5 -translate-y-2.5 border-2 border-black bg-brutal-lime p-4 sm:translate-x-3.5 sm:-translate-y-3.5"
+              className="-translate-y-2 border-2 border-black bg-brutal-lime p-4 sm:-translate-y-3 ltr:translate-x-2 sm:ltr:translate-x-3 rtl:-translate-x-2 sm:rtl:-translate-x-3"
             >
-              <div className="h-48 w-full sm:h-56" />
+              <div className="h-44 w-full sm:h-52" />
             </div>
 
             <div className="absolute inset-0 flex flex-col justify-between overflow-hidden border-2 border-black bg-zinc-900 p-4 text-white shadow-brutal">
@@ -395,27 +418,30 @@ export function DownloaderApp() {
                     alt={media.title}
                     className="h-full w-full object-cover"
                   />
-                  <div className="absolute top-2.5 start-2.5 border-2 border-black bg-brutal-lime px-2.5 py-0.5 font-mono text-[10px] font-black uppercase text-black">
+                  <div className="absolute start-2.5 top-2.5 border-2 border-black bg-brutal-lime px-2.5 py-0.5 font-mono text-[10px] font-black uppercase text-black">
                     {t(`platform_${media.platform}_name`)}
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-between border-b border-zinc-700 pb-2 font-mono text-[10px] text-zinc-400 sm:text-xs">
-                    <span>{t("previewStreamCopy")}</span>
-                    <span className="bg-brutal-lime px-1.5 py-0.5 font-black text-black">
+                  <div className="flex items-center justify-between gap-2 border-b border-zinc-700 pb-2 font-mono text-[10px] text-zinc-400 sm:text-xs">
+                    <span className="truncate">{t("previewStreamCopy")}</span>
+                    <span className="shrink-0 bg-brutal-lime px-1.5 py-0.5 font-black text-black">
                       {t("previewReady")}
                     </span>
                   </div>
-                  <div className="my-auto space-y-2.5 py-4 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center border-2 border-white bg-brutal-purple font-mono text-xl font-black text-white">
+                  <div className="my-auto space-y-2.5 py-3 text-center">
+                    <div className="mx-auto flex h-11 w-11 items-center justify-center border-2 border-white bg-brutal-purple font-mono text-lg font-black text-white sm:h-12 sm:w-12 sm:text-xl">
                       ↓
                     </div>
-                    <p className="font-sans text-xs font-black uppercase tracking-wider text-zinc-200 sm:text-sm">
+                    <p className="px-2 font-sans text-xs font-black uppercase leading-snug tracking-wider text-zinc-200 sm:text-sm">
                       {t("previewIdleText")}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between font-mono text-[10px] text-brutal-lime sm:text-xs">
+                  <div
+                    dir="ltr"
+                    className="flex items-center justify-between font-mono text-[10px] text-brutal-lime sm:text-xs"
+                  >
                     <span>{t("previewCodecsLeft")}</span>
                     <span>{t("previewCodecsRight")}</span>
                   </div>
@@ -424,73 +450,86 @@ export function DownloaderApp() {
             </div>
           </div>
 
-          {/* Overlapping Electric Purple Telemetry Card */}
-          <div className="relative z-10 -mt-6 ms-auto w-full max-w-xs border-2 border-black bg-brutal-purple p-4 font-mono text-[11px] leading-relaxed text-white shadow-brutal sm:max-w-sm sm:text-xs">
-            <p className="font-bold text-brutal-lime">&gt; {t("codeConst")} &#123;</p>
-            <p className="ps-3">
-              {t("codePlatform")}:{" "}
-              <span className="text-brutal-lime">&apos;{localizedPlatName}&apos;</span>,
-            </p>
-            <p className="ps-3">
-              {t("codeFormats")}:{" "}
-              <span className="text-brutal-lime">
-                &apos;
-                {media
-                  ? `${media.formats.length} ${t("codeStreamsUnit")}`
-                  : t("codeDefaultFormats")}
-                &apos;
+          {/* Structured Multi-Language Safe Live Telemetry Card (replaces BiDi-fragile code string) */}
+          <div className="relative z-10 -mt-5 w-full max-w-sm border-2 border-black bg-brutal-purple text-white shadow-brutal sm:ms-auto sm:max-w-sm">
+            <div
+              dir="ltr"
+              className="flex items-center justify-between border-b-2 border-black bg-black px-3 py-1.5 font-mono text-[10px] font-black uppercase text-brutal-lime"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 bg-brutal-pink" />
+                <span className="inline-block h-2 w-2 bg-brutal-lime" />
+                <span>FASTDL // TELEMETRY</span>
               </span>
-              ,
-            </p>
-            <p className="ps-3">
-              {t("codeRemux")}:{" "}
-              <span className="text-brutal-lime">&apos;{t("codeDefaultRemux")}&apos;</span>,
-            </p>
-            <p className="ps-3">
-              {t("codeSpeed")}:{" "}
-              <span className="text-brutal-lime">
-                &apos;
-                {activeJob?.speed_bytes_per_sec
-                  ? formatSpeed(activeJob.speed_bytes_per_sec)
-                  : t("codeDefaultSpeed")}
-                &apos;
-              </span>
-            </p>
-            <p className="font-bold text-brutal-lime">&#125;</p>
+              <span>v1.0</span>
+            </div>
+            <dl className="divide-y divide-white/20 px-3.5 py-2 font-mono text-[11px] sm:text-xs">
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="font-bold uppercase text-white/85">{t("codePlatform")}</dt>
+                <dd className="border border-black bg-brutal-lime px-2 py-0.5 font-black text-black">
+                  {localizedPlatName}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="font-bold uppercase text-white/85">{t("codeFormats")}</dt>
+                <dd dir="auto" className="truncate font-bold text-brutal-lime">
+                  {formatsSummary}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="font-bold uppercase text-white/85">{t("codeRemux")}</dt>
+                <dd dir="auto" className="truncate font-bold text-brutal-lime">
+                  {t("codeDefaultRemux")}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <dt className="font-bold uppercase text-white/85">{t("codeSpeed")}</dt>
+                <dd dir="auto" className="truncate font-bold text-brutal-lime">
+                  {speedSummary}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
       </section>
 
       {/* =================================================================
-          2. FULL-WIDTH HORIZONTAL PLATFORMS STRIP
+          2. FULL-WIDTH HORIZONTAL PLATFORMS STRIP (RTL-Safe Borders)
          ================================================================= */}
       <section
         id="platforms-strip"
         aria-label="Supported platforms"
         className="grid w-full grid-cols-1 border-b-2 border-black bg-white sm:grid-cols-12 dark:bg-[#16161F]"
       >
-        <div className="flex flex-row items-center justify-between border-b-2 border-black bg-brutal-purple px-5 py-4 font-sans text-sm font-black uppercase tracking-wider text-white sm:col-span-3 sm:flex-col sm:items-start sm:justify-center sm:border-b-0 sm:border-e-2 lg:col-span-2 lg:px-8">
+        <div className="flex flex-row items-center justify-between border-b-2 border-black bg-brutal-purple px-5 py-3.5 font-sans text-sm font-black uppercase tracking-wider text-white sm:col-span-3 sm:flex-col sm:items-start sm:justify-center sm:border-b-0 sm:border-e-2 lg:col-span-2 lg:px-8">
           <span>{t("platformsTitle")}</span>
           <span aria-hidden="true" className="text-lg sm:mt-1">
             {locale === "ar" ? "←" : "→"}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 divide-black sm:col-span-9 sm:grid-cols-4 sm:divide-x-2 lg:col-span-10">
-          {(["youtube", "x", "instagram", "facebook"] as const).map((p) => {
+        <div className="grid grid-cols-2 sm:col-span-9 sm:grid-cols-4 lg:col-span-10">
+          {(["youtube", "x", "instagram", "facebook"] as const).map((p, idx) => {
             const meta = PLATFORM_META[p];
             return (
               <div
                 key={p}
-                className="flex flex-col items-center justify-center gap-1.5 border-b border-e border-black p-4 text-center sm:border-b-0 sm:border-e-0 lg:py-6"
+                className={`flex flex-col items-center justify-center gap-1.5 border-black p-4 text-center lg:py-6 ${
+                  idx < 2 ? "border-b-2 sm:border-b-0" : ""
+                } ${idx % 2 === 0 ? "border-e-2 sm:border-e-0" : ""} ${
+                  idx > 0 ? "sm:border-s-2" : ""
+                }`}
               >
-                <span className="flex h-10 w-10 items-center justify-center border-2 border-black bg-black font-mono text-xs font-black text-white shadow-brutal-sm">
+                <span
+                  dir="ltr"
+                  className="flex h-10 w-10 items-center justify-center border-2 border-black bg-black font-mono text-xs font-black text-white shadow-brutal-sm"
+                >
                   {meta.code}
                 </span>
                 <span className="font-mono text-xs font-black uppercase text-black sm:text-sm dark:text-zinc-100">
                   {t(`platform_${p}_name`)}
                 </span>
-                <span className="font-mono text-[10px] text-zinc-600 sm:text-xs dark:text-zinc-400">
+                <span className="font-mono text-[11px] text-zinc-600 sm:text-xs dark:text-zinc-400">
                   {t(`platform_${p}_spec`)}
                 </span>
               </div>
@@ -508,12 +547,12 @@ export function DownloaderApp() {
         className="grid w-full flex-1 grid-cols-1 border-b-2 border-black lg:grid-cols-12"
       >
         {/* Left Main Workspace */}
-        <div className="space-y-6 border-b-2 border-black bg-white p-5 sm:p-8 lg:col-span-8 lg:border-b-0 lg:border-e-2 xl:p-12 dark:bg-[#12121A]">
+        <div className="space-y-6 border-b-2 border-black bg-white p-4 sm:p-8 lg:col-span-8 lg:border-b-0 lg:border-e-2 xl:p-12 dark:bg-[#12121A]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-sans text-lg font-black uppercase tracking-tight text-black sm:text-xl dark:text-zinc-100">
               {t("inspectorTitle")}
             </h2>
-            <div className="flex items-center gap-1.5">
+            <div dir="ltr" className="flex items-center gap-1.5">
               <span className="flex h-8 w-8 items-center justify-center border-2 border-black bg-brutal-pink font-mono text-xs font-black text-black shadow-brutal-sm">
                 &lt;
               </span>
@@ -536,12 +575,12 @@ export function DownloaderApp() {
           {media ? (
             <div className="border-2 border-black bg-white shadow-brutal dark:bg-[#16161F]">
               <div className="border-b-2 border-black bg-brutal-pink p-3 sm:p-5">
-                <div className="flex flex-col gap-4 border-2 border-black bg-white p-4 sm:flex-row dark:bg-zinc-900">
+                <div className="flex flex-col gap-4 border-2 border-black bg-white p-3.5 sm:flex-row sm:p-4 dark:bg-zinc-900">
                   {media.thumbnail_url && (
                     <img
                       src={media.thumbnail_url}
                       alt={media.title}
-                      className="aspect-video w-full shrink-0 border-2 border-black object-cover bg-zinc-200 sm:w-56 md:w-64"
+                      className="aspect-video w-full shrink-0 border-2 border-black bg-zinc-200 object-cover sm:w-52 md:w-64"
                     />
                   )}
                   <div className="min-w-0 flex-1 space-y-2.5">
@@ -550,7 +589,10 @@ export function DownloaderApp() {
                         {t(`platform_${media.platform}_name`)}
                       </span>
                       {media.duration_seconds != null && (
-                        <span className="border-2 border-black bg-brutal-lime px-2 py-0.5 text-black">
+                        <span
+                          dir="ltr"
+                          className="border-2 border-black bg-brutal-lime px-2 py-0.5 text-black"
+                        >
                           {formatDuration(media.duration_seconds)}
                         </span>
                       )}
@@ -559,17 +601,26 @@ export function DownloaderApp() {
                           {t("cachedBadge")}
                         </span>
                       )}
-                      <span className="border border-black bg-zinc-100 px-2 py-0.5 text-black">
+                      <span
+                        dir="ltr"
+                        className="border border-black bg-zinc-100 px-2 py-0.5 text-black"
+                      >
                         {media.resolve_ms}ms
                       </span>
                     </div>
 
-                    <h3 className="line-clamp-2 font-sans text-lg font-black uppercase leading-snug text-black sm:text-xl dark:text-zinc-50">
+                    <h3
+                      dir="auto"
+                      className="line-clamp-2 break-words font-sans text-base font-black uppercase leading-snug text-black sm:text-xl dark:text-zinc-50"
+                    >
                       {media.title}
                     </h3>
 
                     {media.uploader && (
-                      <p className="font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      <p
+                        dir="auto"
+                        className="truncate font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300"
+                      >
                         @{media.uploader}
                       </p>
                     )}
@@ -587,20 +638,23 @@ export function DownloaderApp() {
             </div>
           ) : (
             <div className="border-2 border-black bg-white shadow-brutal dark:bg-[#16161F]">
-              <div className="border-b-2 border-black bg-brutal-pink p-4 sm:p-6">
-                <div className="bg-grid-paper flex flex-col items-center justify-center border-2 border-black px-5 py-10 text-center sm:py-14">
+              <div className="border-b-2 border-black bg-brutal-pink p-3.5 sm:p-6">
+                <div className="bg-grid-paper flex flex-col items-center justify-center border-2 border-black px-4 py-9 text-center sm:px-6 sm:py-14">
                   <span className="border-2 border-black bg-brutal-lime px-3 py-1 font-mono text-xs font-black uppercase text-black shadow-brutal-sm">
                     {t("readyForExtractionBadge")}
                   </span>
-                  <p className="mt-4 font-sans text-2xl font-black uppercase tracking-tight text-black sm:text-3xl dark:text-zinc-100">
+                  <p
+                    dir="ltr"
+                    className="mt-4 font-sans text-xl font-black uppercase tracking-tight text-black sm:text-3xl dark:text-zinc-100"
+                  >
                     {t("readyForExtractionFormats")}
                   </p>
-                  <p className="mt-2 max-w-lg font-mono text-xs leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
+                  <p className="mt-2.5 max-w-lg font-mono text-xs leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
                     {t("readyForExtractionDesc")}
                   </p>
                 </div>
               </div>
-              <div className="space-y-3 p-5 sm:p-6">
+              <div className="space-y-3 p-4 sm:p-6">
                 <h3 className="font-sans text-base font-black uppercase text-black dark:text-zinc-100">
                   {t("zeroTranscodingTitle")}
                 </h3>
@@ -624,7 +678,7 @@ export function DownloaderApp() {
         </div>
 
         {/* Right Acid Lime Column */}
-        <div className="bg-brutal-lime p-5 sm:p-8 lg:col-span-4 xl:p-10">
+        <div className="bg-brutal-lime p-4 sm:p-8 lg:col-span-4 xl:p-10">
           <HistoryDrawer
             items={history}
             onSelectUrl={(u) => {
@@ -640,7 +694,7 @@ export function DownloaderApp() {
       </section>
 
       {/* =================================================================
-          4. FULL-WIDTH BOTTOM SPLIT BENTO
+          4. FULL-WIDTH BOTTOM SPLIT BENTO (RTL-Safe Numbered Steps)
          ================================================================= */}
       <section
         id="pipeline-section"
@@ -656,52 +710,66 @@ export function DownloaderApp() {
           </span>
         </div>
 
-        <div className="border-b-2 border-black bg-white p-6 sm:p-8 lg:col-span-6 lg:border-b-0 lg:border-e-2 xl:p-12 dark:bg-[#16161F]">
-          <div className="relative space-y-6 border-s-2 border-black ps-6 dark:border-zinc-500">
-            <div className="relative">
-              <span className="absolute -start-[31px] top-1 h-3.5 w-3.5 border-2 border-black bg-brutal-lime" />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-sans text-sm font-black uppercase text-black sm:text-base dark:text-zinc-100">
-                  {t("pipe1Title")}
-                </h3>
-                <span className="font-mono text-xs font-bold text-zinc-500">{t("pipe1Time")}</span>
+        <div className="border-b-2 border-black bg-white p-5 sm:p-8 lg:col-span-6 lg:border-b-0 lg:border-e-2 xl:p-12 dark:bg-[#16161F]">
+          <div className="space-y-4">
+            {[
+              {
+                num: "01",
+                badgeBg: "bg-brutal-lime text-black",
+                title: t("pipe1Title"),
+                time: t("pipe1Time"),
+                desc: t("pipe1Desc"),
+              },
+              {
+                num: "02",
+                badgeBg: "bg-brutal-pink text-black",
+                title: t("pipe2Title"),
+                time: t("pipe2Time"),
+                desc: t("pipe2Desc"),
+              },
+              {
+                num: "03",
+                badgeBg: "bg-brutal-purple text-white",
+                title: t("pipe3Title"),
+                time: t("pipe3Time"),
+                desc: t("pipe3Desc"),
+              },
+            ].map((step) => (
+              <div
+                key={step.num}
+                className="flex items-start gap-3.5 border-2 border-black bg-zinc-50 p-3.5 shadow-brutal-sm sm:p-4 dark:bg-zinc-900"
+              >
+                <span
+                  dir="ltr"
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center border-2 border-black font-mono text-xs font-black ${step.badgeBg}`}
+                >
+                  {step.num}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-sans text-sm font-black uppercase text-black sm:text-base dark:text-zinc-100">
+                      {step.title}
+                    </h3>
+                    <span className="border border-black bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-black">
+                      {step.time}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 font-mono text-xs leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
+                    {step.desc}
+                  </p>
+                </div>
               </div>
-              <p className="mt-1 font-mono text-xs text-zinc-600 sm:text-sm dark:text-zinc-400">
-                {t("pipe1Desc")}
-              </p>
-            </div>
-
-            <div className="relative">
-              <span className="absolute -start-[31px] top-1 h-3.5 w-3.5 border-2 border-black bg-brutal-pink" />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-sans text-sm font-black uppercase text-black sm:text-base dark:text-zinc-100">
-                  {t("pipe2Title")}
-                </h3>
-                <span className="font-mono text-xs font-bold text-zinc-500">{t("pipe2Time")}</span>
-              </div>
-              <p className="mt-1 font-mono text-xs text-zinc-600 sm:text-sm dark:text-zinc-400">
-                {t("pipe2Desc")}
-              </p>
-            </div>
-
-            <div className="relative">
-              <span className="absolute -start-[31px] top-1 h-3.5 w-3.5 border-2 border-black bg-brutal-purple" />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-sans text-sm font-black uppercase text-black sm:text-base dark:text-zinc-100">
-                  {t("pipe3Title")}
-                </h3>
-                <span className="font-mono text-xs font-bold text-zinc-500">{t("pipe3Time")}</span>
-              </div>
-              <p className="mt-1 font-mono text-xs text-zinc-600 sm:text-sm dark:text-zinc-400">
-                {t("pipe3Desc")}
-              </p>
-            </div>
+            ))}
           </div>
         </div>
 
         <div className="bg-grid-purple relative flex flex-col justify-between overflow-hidden p-6 sm:p-8 lg:col-span-4 xl:p-12">
           <div className="space-y-3">
-            <h2 className="font-sans text-2xl font-black uppercase leading-tight text-white sm:text-3xl">
+            <h2
+              className={`font-sans text-2xl font-black uppercase text-white sm:text-3xl ${
+                locale === "ar" ? "leading-relaxed" : "leading-tight"
+              }`}
+            >
               {t("privacyLine1")}
               <br />
               {t("privacyLine2")}
@@ -710,7 +778,9 @@ export function DownloaderApp() {
               <br />
               {t("privacyLine4")}
             </h2>
-            <p className="font-mono text-xs text-white/90 sm:text-sm">{t("privacyDesc")}</p>
+            <p className="font-mono text-xs leading-relaxed text-white/90 sm:text-sm">
+              {t("privacyDesc")}
+            </p>
           </div>
 
           <div className="mt-6">
