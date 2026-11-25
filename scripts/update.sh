@@ -128,6 +128,9 @@ rollback_on_failure() {
   if [ "$HAVE_PREVIOUS" = "true" ]; then
     echo -e "${YELLOW}Auto-rolling back to ':previous' production images...${RESET}" >&2
     IMAGE_TAG=previous docker compose "${COMPOSE_ARGS[@]}" up -d --wait || true
+    if [ "$NETWORK_MODE" = "bundled" ] && docker ps --format '{{.Names}}' | grep -q '^vdl-prod-nginx'; then
+      docker compose "${COMPOSE_ARGS[@]}" exec -T nginx nginx -s reload >/dev/null 2>&1 || true
+    fi
     echo -e "${YELLOW}Rollback to ':previous' complete.${RESET}" >&2
   fi
   exit 1
@@ -152,6 +155,7 @@ IMAGE_TAG=latest docker compose "${COMPOSE_ARGS[@]}" --profile warp up -d warp >
 if [ "$NETWORK_MODE" = "bundled" ] && docker ps --format '{{.Names}}' | grep -q '^vdl-prod-nginx'; then
   docker compose "${COMPOSE_ARGS[@]}" exec -T nginx nginx -t && \
     docker compose "${COMPOSE_ARGS[@]}" exec -T nginx nginx -s reload
+  sleep 1
   log_ok "Nginx validated and reloaded."
 fi
 
@@ -168,15 +172,33 @@ NGINX_HTTP_PORT="$(grep -E '^NGINX_HTTP_PORT=' .env.prod 2>/dev/null | head -n1 
 HEALTH_URL="http://127.0.0.1:${NGINX_HTTP_PORT:-8088}"
 
 if [ "$NETWORK_MODE" = "bundled" ]; then
-  if ! curl -fsS "${HEALTH_URL}/healthz" >/dev/null; then
+  HEALTH_OK="false"
+  for attempt in $(seq 1 15); do
+    if curl -fsS --max-time 5 "${HEALTH_URL}/healthz" >/dev/null 2>&1; then
+      HEALTH_OK="true"
+      break
+    fi
+    sleep 1
+  done
+  if [ "$HEALTH_OK" != "true" ]; then
+    echo -e "${RED}Health check failed after 15 attempts (${HEALTH_URL}/healthz). Recent nginx logs:${RESET}" >&2
+    docker compose "${COMPOSE_ARGS[@]}" logs --tail=20 nginx >&2 || true
     rollback_on_failure
   fi
-  VERSION_INFO="$(curl -fsS "${HEALTH_URL}/api/v1/version" 2>/dev/null || echo "{}")"
+  VERSION_INFO="$(curl -fsS --max-time 5 "${HEALTH_URL}/api/v1/version" 2>/dev/null || echo "{}")"
 else
-  if ! docker compose "${COMPOSE_ARGS[@]}" exec -T api curl -fsS http://127.0.0.1:8000/healthz >/dev/null; then
+  HEALTH_OK="false"
+  for attempt in $(seq 1 15); do
+    if docker compose "${COMPOSE_ARGS[@]}" exec -T api curl -fsS --max-time 5 http://127.0.0.1:8000/healthz >/dev/null 2>&1; then
+      HEALTH_OK="true"
+      break
+    fi
+    sleep 1
+  done
+  if [ "$HEALTH_OK" != "true" ]; then
     rollback_on_failure
   fi
-  VERSION_INFO="$(docker compose "${COMPOSE_ARGS[@]}" exec -T api curl -fsS http://127.0.0.1:8000/api/v1/version 2>/dev/null || echo "{}")"
+  VERSION_INFO="$(docker compose "${COMPOSE_ARGS[@]}" exec -T api curl -fsS --max-time 5 http://127.0.0.1:8000/api/v1/version 2>/dev/null || echo "{}")"
 fi
 
 log_ok "Health check passed! Active version: ${VERSION_INFO}"
