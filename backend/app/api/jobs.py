@@ -230,6 +230,7 @@ async def stream_job_events(job_id: str, request: Request) -> StreamingResponse:
 async def cancel_job(job_id: str, request: Request) -> dict[str, str]:
     """Cancel an active job or clean up an already completed job's temporary files."""
     svc = get_app_state(request)
+    client_ip = get_client_ip(request, svc.settings)
     snapshot = await svc.job_store.get_job(job_id)
     if snapshot is None:
         raise AppError(
@@ -245,4 +246,5 @@ async def cancel_job(job_id: str, request: Request) -> dict[str, str]:
     await svc.job_store.save_job(snapshot, publish=True)
     svc.storage.cleanup_job(job_id)
     await svc.job_store.delete_artifact_metadata(job_id)
+    await svc.rate_limiter.release_ip_job(client_ip, job_id)
     return {"status": "cancelled", "job_id": job_id}

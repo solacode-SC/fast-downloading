@@ -48,7 +48,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     codeStreamsUnit: "streams",
     codeDefaultFormats: "4K / 1080p / Audio",
     codeDefaultRemux: "ffmpeg -c copy",
-    codeDefaultSpeed: "12x parallel fragments",
+    codeDefaultSpeed: "16x parallel acceleration",
     // Platforms Strip
     platformsTitle: "PLATFORMS",
     platform_youtube_name: "YouTube",
@@ -127,6 +127,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     statusFailed: "Failed",
     statusCancelled: "Cancelled",
     retry: "Retry",
+    downloadAnother: "Download another",
     // Error localized overrides
     err_NETWORK_msg: "A network error occurred while communicating with the platform.",
     err_NETWORK_hint:
@@ -154,18 +155,44 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     pipe1Title: "FAST RESOLVE & SSRF GUARD",
     pipe1Time: "~1–3 SEC",
     pipe1Desc: "Strict domain allowlist, hop-by-hop DNS validation, and Redis metadata caching.",
-    pipe2Title: "LAYERED ANTI-BLOCK & PARALLEL FRAGMENTS",
-    pipe2Time: "12X CONCURRENT",
-    pipe2Desc: "Browser TLS/HTTP2 impersonation, YouTube PO token sidecar, and client fallback.",
+    pipe2Title: "LAYERED ANTI-BLOCK & 16X ACCELERATION",
+    pipe2Time: "16X PARALLEL",
+    pipe2Desc:
+      "Multi-connection aria2c acceleration, browser TLS/HTTP2 impersonation, and YouTube PO token sidecar.",
     pipe3Title: "STREAM COPY REMUX & SIGNED DELIVERY",
     pipe3Time: "HMAC-SHA256",
     pipe3Desc: "Merged via ffmpeg -c copy on fast tmpfs and streamed with HTTP Range support.",
     privacyLine1: "PRIVACY-FIRST.",
-    privacyLine2: "ZERO TRACKING.",
+    privacyLine2: "NO AD TRACKERS.",
     privacyLine3: "PUBLIC MEDIA",
     privacyLine4: "ONLY.",
-    privacyDesc: "No analytics scripts. History lives strictly in your browser's localStorage.",
+    privacyDesc:
+      "Zero ads, zero cookies, and no account required. Download history lives strictly in your browser's localStorage.",
     readLegalBtn: "READ LEGAL SCOPE →",
+    // Home FAQ & GEO Section
+    faqBadge: "FASTDL // KNOWLEDGE BASE",
+    faqSectionTitle: "FAST, FREE, AD-FREE VIDEO DOWNLOADER FAQ",
+    faqSectionDesc:
+      "Everything you need to know about downloading public 4K videos, MP3 320 kbps audio, and SRT subtitles from YouTube, X (Twitter), Instagram, and Facebook with FastDL.",
+    dedicatedToolsLabel: "DEDICATED PLATFORM DOWNLOADERS",
+    faq1Q: "What is FastDL and which platforms are supported?",
+    faq1A:
+      "FastDL (fastdownloading.solaymanbuilds.com) is a free, privacy-first online video downloader for public, non-DRM media from YouTube (4K/2160p, HDR, 60fps, Shorts, playlists), X / Twitter (HD MP4 and GIFs), Instagram (Reels, posts, and multi-video carousels), and Facebook (Watch and Reels). No signup, browser extension, or app install is needed.",
+    faq2Q: "Why is FastDL faster than other online video downloaders?",
+    faq2A:
+      "FastDL uses 16-connection parallel HTTP acceleration (aria2c) and concurrent fragment fetching, merges video and audio directly on RAM-backed tmpfs with ffmpeg -c copy (zero quality-losing re-encoding), and delivers files via HTTP 206 Range streaming.",
+    faq3Q: "Can I download YouTube videos in 4K 60fps, 1080p MP4, or MP3 320 kbps?",
+    faq3A:
+      "Yes. Paste any public YouTube link and choose Best Available (up to 4K 2160p HDR VP9/AV1), Best Compatible MP4 (H.264 + AAC for iPhone, macOS, Windows, and TVs), 1440p/1080p/720p/480p, original M4A audio, or MP3 at 320 kbps / 192 kbps. You can also include SRT subtitles and the video thumbnail.",
+    faq4Q: "How do I download X (Twitter), Instagram Reels, or Facebook videos without logging in?",
+    faq4A:
+      "Copy any public post, Reel, or Watch link, paste it into FastDL, and click Quick Download or Analyze Formats. FastDL resolves public streams without asking for your social media password or login.",
+    faq5Q: "Is FastDL safe, private, and free of popups?",
+    faq5A:
+      "Yes. FastDL has zero popups, zero adware, and no user accounts. Temporary files expire automatically after 30 minutes, your recent history stays strictly in your browser localStorage, and traffic is protected with strict SSRF and HMAC-signed download tokens.",
+    faq6Q: "Can I download multiple videos in a row without refreshing?",
+    faq6A:
+      "Yes. Simply paste a new link into the input box or click Paste / Download Another to immediately analyze and download your next video without reloading the page.",
     // Footer & Legal / DMCA pages
     engineFooter: "ENGINE",
     legalNotice:
@@ -185,7 +212,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
       "Temporary files are automatically deleted after a short expiration window (default 30 minutes).",
     legalSec3Title: "Privacy & Independence",
     legalSec3Body:
-      "No third-party analytics, advertising pixels, or server-side user tracking. Your recent download history is stored exclusively inside your browser's localStorage. Not affiliated with YouTube, X Corp., or Meta Platforms.",
+      "No advertising pixels, no tracking cookies, and no user accounts. Aggregate, cookie-less traffic metrics may be collected without personal identifiers. Your recent download history is stored exclusively inside your browser's localStorage. Not affiliated with YouTube, X Corp., or Meta Platforms.",
     dmcaPageTitle: "DMCA & CONTACT",
     dmcaSec1Title: "Reporting Abuse or Copyright Concerns",
     dmcaSec1Body:
@@ -238,7 +265,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     codeStreamsUnit: "flux",
     codeDefaultFormats: "4K / 1080p / Audio",
     codeDefaultRemux: "ffmpeg -c copy",
-    codeDefaultSpeed: "12x fragments parallèles",
+    codeDefaultSpeed: "16x accélération parallèle",
     platformsTitle: "PLATEFORMES",
     platform_youtube_name: "YouTube",
     platform_youtube_spec: "4K · HDR · Shorts",
@@ -313,6 +340,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     statusFailed: "Échec",
     statusCancelled: "Annulé",
     retry: "Réessayer",
+    downloadAnother: "Télécharger une autre vidéo",
     err_NETWORK_msg: "Erreur réseau lors de la communication avec la plateforme.",
     err_NETWORK_hint: "Veuillez réessayer dans quelques instants.",
     err_BOT_CHECK_msg: "La plateforme a déclenché une vérification anti-bot.",
@@ -336,18 +364,42 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     pipe1Title: "ANALYSE RAPIDE & PROTECTION SSRF",
     pipe1Time: "~1–3 SEC",
     pipe1Desc: "Liste blanche stricte de domaines, validation DNS et cache Redis.",
-    pipe2Title: "ANTI-BLOCAGE & FRAGMENTS PARALLÈLES",
-    pipe2Time: "12X SIMULTANÉS",
-    pipe2Desc: "Empreinte TLS/HTTP2 navigateur, jetons PO YouTube et repli automatique.",
+    pipe2Title: "ANTI-BLOCAGE & ACCÉLÉRATION 16X",
+    pipe2Time: "16X PARALLÈLE",
+    pipe2Desc: "Accélération multi-connexions aria2c, empreinte TLS/HTTP2 et jetons PO YouTube.",
     pipe3Title: "COPIE DE FLUX & LIVRAISON SIGNÉE",
     pipe3Time: "HMAC-SHA256",
     pipe3Desc: "Assemblage via ffmpeg -c copy sur tmpfs et streaming HTTP Range.",
     privacyLine1: "VIE PRIVÉE.",
-    privacyLine2: "ZÉRO PISTAGE.",
+    privacyLine2: "SANS PUBLICITÉ.",
     privacyLine3: "MÉDIAS PUBLICS",
     privacyLine4: "UNIQUEMENT.",
-    privacyDesc: "Aucun script d'analyse. L'historique reste dans le localStorage du navigateur.",
+    privacyDesc:
+      "Sans publicité, sans cookies de pistage ni compte requis. L'historique reste dans le localStorage du navigateur.",
     readLegalBtn: "LIRE LE CADRE LÉGAL →",
+    faqBadge: "FASTDL // QUESTIONS FRÉQUENTES",
+    faqSectionTitle: "FAQ TÉLÉCHARGEUR VIDÉO 4K GRATUIT",
+    faqSectionDesc:
+      "Tout savoir sur le téléchargement de vidéos publiques 4K, audio MP3 320 kbps et sous-titres SRT depuis YouTube, X, Instagram et Facebook.",
+    dedicatedToolsLabel: "TÉLÉCHARGEURS PAR PLATEFORME",
+    faq1Q: "Qu'est-ce que FastDL et quelles plateformes sont prises en charge ?",
+    faq1A:
+      "FastDL est un téléchargeur vidéo en ligne gratuit et respectueux de la vie privée pour YouTube (4K, HDR, Shorts), X / Twitter (MP4 HD, GIF), Instagram (Reels, carrousels) et Facebook (Watch, Reels). Sans inscription ni extension.",
+    faq2Q: "Pourquoi FastDL est-il plus rapide que les autres téléchargeurs ?",
+    faq2A:
+      "FastDL combine 16 connexions parallèles (aria2c), un assemblage direct sans réencodage (ffmpeg -c copy) en mémoire RAM (tmpfs) et un streaming HTTP 206 Range.",
+    faq3Q: "Puis-je télécharger YouTube en 4K, 1080p MP4 ou MP3 320 kbps ?",
+    faq3A:
+      "Oui. Choisissez la meilleure qualité 4K (VP9/AV1), MP4 universel (H.264 + AAC), 1080p/720p, audio M4A original ou MP3 320/192 kbps, avec sous-titres SRT en option.",
+    faq4Q: "Comment télécharger des vidéos X, Instagram Reels ou Facebook sans connexion ?",
+    faq4A:
+      "Copiez le lien d'une vidéo publique, collez-le dans FastDL et cliquez sur Téléchargement rapide ou Analyser les formats. Aucun identifiant de réseau social n'est demandé.",
+    faq5Q: "FastDL est-il sûr et sans popups publicitaires ?",
+    faq5A:
+      "Oui. Aucune publicité intrusive, aucun cookie de suivi, suppression automatique des fichiers temporaires après 30 minutes et liens de téléchargement signés HMAC.",
+    faq6Q: "Puis-je enchaîner plusieurs téléchargements sans recharger la page ?",
+    faq6A:
+      "Oui. Collez directement un nouveau lien ou cliquez sur Coller / Télécharger une autre vidéo pour analyser et sauvegarder immédiatement la vidéo suivante.",
     engineFooter: "MOTEUR",
     legalNotice:
       "Pour usage personnel uniquement, et seulement pour les contenus dont vous détenez les droits ou l'autorisation. Vous êtes responsable du respect des conditions des plateformes et du droit d'auteur.",
@@ -365,7 +417,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
       "Les fichiers temporaires sont automatiquement supprimés après expiration (30 minutes par défaut).",
     legalSec3Title: "Confidentialité & indépendance",
     legalSec3Body:
-      "Aucun suivi analytique ni publicitaire. Votre historique est stocké uniquement dans le localStorage de votre navigateur.",
+      "Aucun suivi publicitaire, aucun cookie de pistage et aucun compte requis. Des mesures d'audience agrégées sans cookies peuvent être utilisées. Votre historique reste stocké uniquement dans le localStorage de votre navigateur.",
     dmcaPageTitle: "DMCA & CONTACT",
     dmcaSec1Title: "Signalement d'abus ou de droits d'auteur",
     dmcaSec1Body:
@@ -420,7 +472,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     codeStreamsUnit: "صيغة متاحة",
     codeDefaultFormats: "4K / 1080p / صوت",
     codeDefaultRemux: "دمج مباشر بدون إعادة ترميز",
-    codeDefaultSpeed: "12 اتصال متوازي فائق السرعة",
+    codeDefaultSpeed: "16 اتصال متوازي فائق السرعة",
     // Platforms Strip (100% Arabic)
     platformsTitle: "المنصات",
     platform_youtube_name: "يوتيوب",
@@ -499,6 +551,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     statusFailed: "فشل التحميل",
     statusCancelled: "تم الإلغاء",
     retry: "إعادة المحاولة",
+    downloadAnother: "تحميل فيديو آخر",
     err_NETWORK_msg: "حدث خطأ في الاتصال بالشبكة أثناء التواصل مع المنصة.",
     err_NETWORK_hint: "قد يكون السبب حظراً محلياً من الشبكة أو عطل مؤقت. يرجى المحاولة مرة أخرى.",
     err_BOT_CHECK_msg: "طلبت المنصة تحقق مكافحة البوتات.",
@@ -524,18 +577,41 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     pipe1Title: "تحليل فوري وحماية أمنية SSRF",
     pipe1Time: "~١–٣ ثوانٍ",
     pipe1Desc: "تحقق صارم من النطاقات المسموحة وفحص عناوين DNS مع تخزين مؤقت سريع في Redis.",
-    pipe2Title: "مقاومة الحظر وتحميل متوازي للأجزاء",
-    pipe2Time: "١٢ اتصال متزامن",
-    pipe2Desc: "محاكاة بصمة المتصفح TLS/HTTP2 مع مولد رموز يوتيوب وتبديل تلقائي للعملاء.",
+    pipe2Title: "مقاومة الحظر وتسريع 16 اتصالاً متوازياً",
+    pipe2Time: "١٦ اتصالاً متوازياً",
+    pipe2Desc: "تسريع عبر aria2c متعدد الاتصالات، محاكاة بصمة المتصفح TLS/HTTP2 ومولد رموز يوتيوب.",
     pipe3Title: "دمج مباشر بدون ترميز وروابط موقعة",
     pipe3Time: "توقيع HMAC-SHA256",
     pipe3Desc: "دمج الصوت والفيديو عبر ffmpeg -c copy على ذاكرة سريعة مع دعم استكمال التحميل.",
     privacyLine1: "الخصوصية أولاً.",
-    privacyLine2: "بدون أي تتبع.",
+    privacyLine2: "بدون إعلانات.",
     privacyLine3: "محتوى عام",
     privacyLine4: "فقط.",
-    privacyDesc: "لا توجد أي برمجيات تتبع أو تحليلات. يُحفظ سجل تحميلاتك داخل متصفحك فقط.",
+    privacyDesc: "بدون إعلانات أو ملفات تتبع أو تسجيل دخول. يُحفظ سجل تحميلاتك داخل متصفحك فقط.",
     readLegalBtn: "اقرأ الشروط والنطاق القانوني ←",
+    faqBadge: "FASTDL // الأسئلة الشائعة",
+    faqSectionTitle: "الأسئلة الشائعة حول تحميل الفيديوهات 4K مجاناً",
+    faqSectionDesc:
+      "كل ما تحتاج معرفته لتحميل الفيديوهات العامة بدقة 4K وصوت MP3 320 kbps وترجمة SRT من يوتيوب وإكس وإنستغرام وفيسبوك عبر FastDL.",
+    dedicatedToolsLabel: "أدوات التحميل المخصصة لكل منصة",
+    faq1Q: "ما هو FastDL وما هي المنصات المدعومة؟",
+    faq1A:
+      "FastDL أداة مجانية وسريعة لتحميل الفيديوهات العامة من يوتيوب (4K وHDR وShorts)، وإكس / تويتر (MP4 وGIF)، وإنستغرام (ريلز والمنشورات المتعددة)، وفيسبوك (Watch وريلز) بدون تسجيل أو إضافات متصفح.",
+    faq2Q: "لماذا يعد FastDL أسرع من مواقع تحميل الفيديو الأخرى؟",
+    faq2A:
+      "يستخدم FastDL تسريع التحميل بـ 16 اتصالاً متوازياً عبر aria2c مع دمج مباشر بدون إعادة ترميز (ffmpeg -c copy) على ذاكرة RAM سريعة ودعم استكمال التحميل HTTP 206 Range.",
+    faq3Q: "هل يمكن تحميل فيديوهات يوتيوب بدقة 4K أو 1080p MP4 أو صوت MP3 320 kbps؟",
+    faq3A:
+      "نعم، يمكنك اختيار أعلى جودة متاحة حتى 4K 2160p HDR، أو MP4 متوافق لجميع الأجهزة، أو 1080p/720p، أو صوت M4A أصلي أو MP3 بجودة 320/192 كيلوبت/ث مع ملف الترجمة SRT.",
+    faq4Q: "كيف أحمّل فيديوهات إكس أو ريلز إنستغرام أو فيسبوك بدون تسجيل دخول؟",
+    faq4A:
+      "انسخ رابط الفيديو العام ثم الصقه في FastDL واضغط على تحميل سريع أو تحليل الصيغ، دون الحاجة لإدخال أي كلمة مرور أو حساب.",
+    faq5Q: "هل موقع FastDL آمن وخالٍ من النوافذ المنبثقة؟",
+    faq5A:
+      "نعم، الموقع خالٍ تماماً من الإعلانات والنوافذ المنبثقة وملفات التتبع، وتُحذف الملفات المؤقتة تلقائياً بعد 30 دقيقة.",
+    faq6Q: "هل يمكن تحميل أكثر من فيديو متتالي بدون تحديث الصفحة؟",
+    faq6A:
+      "نعم، الصق الرابط الجديد مباشرة أو اضغط على لصق أو تحميل فيديو آخر للانتقال فوراً إلى الفيديو التالي بدون إعادة تحميل الصفحة.",
     // Footer & Legal / DMCA pages (100% Arabic)
     engineFooter: "محرك التحميل",
     legalNotice:
@@ -554,7 +630,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
       "يتم حذف الملفات المحملة مؤقتاً من الخادم تلقائياً بعد فترة قصيرة (30 دقيقة افتراضياً).",
     legalSec3Title: "الخصوصية والاستقلالية",
     legalSec3Body:
-      "لا يستخدم هذا الموقع أي أدوات تتبع أو إعلانات أو تحليلات خارجية. يُحفظ سجل التحميلات الأخير حصرياً داخل متصفحك (localStorage) ويمكنك مسحه في أي وقت. هذا التطبيق مستقل وغير تابع ليوتيوب أو إكس أو ميتا.",
+      "لا يستخدم هذا الموقع أي إعلانات أو ملفات تعريف ارتباط للتتبع ولا يتطلب تسجيل دخول. تُحفظ بيانات السجل حصرياً داخل متصفحك (localStorage) ويمكنك مسحها في أي وقت. هذا التطبيق مستقل وغير تابع ليوتيوب أو إكس أو ميتا.",
     dmcaPageTitle: "حقوق النشر والتواصل (DMCA)",
     dmcaSec1Title: "الإبلاغ عن إساءة الاستخدام أو حقوق الملكية",
     dmcaSec1Body:

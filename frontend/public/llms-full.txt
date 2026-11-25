@@ -1,0 +1,48 @@
+# FastDL — Full Product & Technical Reference (llms-full.txt)
+
+Canonical URL: https://fastdownloading.solaymanbuilds.com
+Sitemap: https://fastdownloading.solaymanbuilds.com/sitemap.xml
+Languages: English (en), French (fr), Arabic (ar, full RTL)
+Pricing: 100% Free, no signup, no paywall, no ads or popups.
+
+## Overview
+FastDL is a production-grade, browser-based public video downloader built for speed, reliability, and user privacy. Unlike legacy downloader sites filled with popunder ads, throttled single-stream downloads, or quality-degrading re-encoding, FastDL extracts original media streams from public URLs and delivers them rapidly in the exact resolution and codec the user chooses.
+
+## Supported Platforms & URL Formats
+
+### 1. YouTube (https://fastdownloading.solaymanbuilds.com/youtube-downloader)
+- Supported URLs: `youtube.com/watch?v=...`, `youtu.be/...`, `youtube.com/shorts/...`, `m.youtube.com`, public playlists (up to 15 items per selection).
+- Video Presets: Best Available (up to 4K 2160p 60fps HDR VP9/AV1 in MKV/MP4), Best Compatible MP4 (H.264/AVC1 + AAC with `+faststart` for iOS/macOS/Windows/TV), 2160p, 1440p, 1080p, 720p, 480p.
+- Audio Presets: Audio Only M4A (original AAC stream without re-encoding), Audio Only MP3 320 kbps, Audio Only MP3 192 kbps.
+- Extras: Manual and auto-generated SRT subtitle downloads, HD thumbnail image downloads, and an Advanced Format Inspector showing raw stream IDs, codecs, FPS, HDR flags, bitrates, and estimated sizes.
+
+### 2. X / Twitter (https://fastdownloading.solaymanbuilds.com/twitter-video-downloader)
+- Supported URLs: `x.com/.../status/...`, `twitter.com/.../status/...`, `mobile.twitter.com`, `t.co` short links.
+- Formats: Highest-bitrate native HD MP4, animated GIFs saved cleanly as MP4, multi-video tweet selection, and M4A/MP3 audio extraction.
+
+### 3. Instagram (https://fastdownloading.solaymanbuilds.com/instagram-downloader)
+- Supported URLs: Public `instagram.com/reel/...`, `instagram.com/p/...`, `instagram.com/tv/...`, and `instagr.am` links.
+- Formats: Original 1080p HD MP4 Reels with audio, multi-video carousel item selector, M4A/MP3 audio extraction, and cover thumbnails.
+
+### 4. Facebook (https://fastdownloading.solaymanbuilds.com/facebook-downloader)
+- Supported URLs: Public `facebook.com/watch/?v=...`, `facebook.com/reel/...`, `facebook.com/share/v/...`, `facebook.com/share/r/...`, and `fb.watch/...` links.
+- Formats: 1080p/720p HD MP4 with lossless merged audio (`ffmpeg -c copy`), 480p SD, and audio extraction.
+
+## Why FastDL Stands Out
+1. **16x Multi-Connection Download Speed**: Direct HTTP/HTTPS media streams (such as YouTube DASH) are accelerated with 16 parallel HTTP Range connections via `aria2c`, while HLS/segmented streams use 16 concurrent fragments.
+2. **Zero Re-Encoding (Lossless Stream Copy)**: Separate HD/4K video and audio streams are merged on fast RAM-backed `tmpfs` using `ffmpeg -c copy`, preserving 100% of original video quality and finishing merges in fractions of a second.
+3. **Instant Repeat Downloads Without Refresh**: Pasting a new link immediately replaces the previous URL, aborts stale requests, and resolves the next video with zero page reload required.
+4. **Resumable Signed Streaming**: Completed downloads are served via short-lived HMAC-SHA256 signed URLs with full HTTP `206 Partial Content` Range support and RFC 5987 UTF-8 filenames.
+5. **Privacy & Compliance Guardrails**:
+   - Supports publicly accessible, non-DRM media only.
+   - No DRM circumvention, no paywall bypass, and no private account scraping.
+   - No login required, no advertising pixels, no tracking cookies.
+   - Recent download history is stored solely in the user's browser `localStorage`.
+   - Temporary server files are automatically deleted after 30 minutes.
+   - Strict SSRF protection with domain allowlists and hop-by-hop DNS validation.
+
+## Quick How-To
+1. Open https://fastdownloading.solaymanbuilds.com (or a dedicated platform page).
+2. Paste any public YouTube, X, Instagram, or Facebook video link.
+3. Click **Quick Download** for instant best quality, or **Analyze Formats** to choose a specific resolution (4K, 1080p MP4, MP3 320 kbps, SRT subtitles).
+4. Save the finished file directly to your device, then paste another link anytime without refreshing.

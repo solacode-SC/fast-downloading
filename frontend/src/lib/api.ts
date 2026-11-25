@@ -158,11 +158,12 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
-export async function resolveUrl(url: string): Promise<ResolveResponse> {
+export async function resolveUrl(url: string, signal?: AbortSignal): Promise<ResolveResponse> {
   const res = await fetch("/api/v1/resolve", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
+    signal,
   });
   return parseResponse<ResolveResponse>(res);
 }

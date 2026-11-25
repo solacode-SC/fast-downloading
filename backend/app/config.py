@@ -61,14 +61,14 @@ class Settings(BaseSettings):
     platform_rate_limit_per_minute: int = 60
 
     # Speed tuning
-    ytdlp_concurrent_fragments: int = 12
+    ytdlp_concurrent_fragments: int = 16
     ytdlp_http_chunk_size: int = 10_485_760  # 10 MiB
     ytdlp_retries: int = 5
     ytdlp_fragment_retries: int = 5
-    ytdlp_buffer_size: int = 65_536
+    ytdlp_buffer_size: int = 262_144  # 256 KiB
     ytdlp_socket_timeout: int = 20
     ytdlp_force_ipv4: bool = True
-    enable_aria2c: bool = False
+    enable_aria2c: bool = True
     aria2c_connections: int = 16
     aria2c_splits: int = 16
     aria2c_min_split_size: str = "1M"
@@ -104,8 +104,8 @@ class Settings(BaseSettings):
     # Anti-block L6: Circuit breaker
     circuit_breaker_threshold: int = 5
     circuit_breaker_cooldown_seconds: int = 120
-    jitter_min_ms: int = 50
-    jitter_max_ms: int = 250
+    jitter_min_ms: int = 15
+    jitter_max_ms: int = 60
 
     # Anti-block L7: Canary URLs (optional overrides)
     canary_enabled: bool = True

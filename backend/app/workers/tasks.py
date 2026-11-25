@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from app.config import Settings
@@ -21,6 +22,18 @@ from app.services.storage import StorageManager
 from app.services.updater import update_ytdlp_with_rollback
 
 logger = logging.getLogger(__name__)
+
+
+def _measure_work_dir_bytes(work_dir: Path) -> int:
+    """Measure real bytes written in work_dir (handles sparse multi-split aria2c files)."""
+    written = 0
+    for f in work_dir.glob("*"):
+        if not f.is_file() or f.name.endswith(".aria2"):
+            continue
+        st = f.stat()
+        alloc = getattr(st, "st_blocks", 0) * 512
+        written += min(alloc, st.st_size) if alloc > 0 else st.st_size
+    return written
 
 
 async def download_job_task(
@@ -77,9 +90,28 @@ async def download_job_task(
     watcher = asyncio.create_task(_watch_cancel())
     loop = asyncio.get_running_loop()
     last_publish = {"ts": 0.0}
+    last_hook_ts = {"ts": 0.0}
+
+    # Estimate total bytes from cached resolve metadata (useful for aria2c live progress)
+    estimated_total_bytes: int | None = None
+    try:
+        cached_meta = await store.get_cached_resolve(normalized_url)
+        if cached_meta is not None:
+            if format_id:
+                fmt_match = next((f for f in cached_meta.formats if f.format_id == format_id), None)
+                if fmt_match:
+                    estimated_total_bytes = fmt_match.filesize_bytes or fmt_match.filesize_approx_bytes
+            elif preset is not None:
+                preset_match = next((p for p in cached_meta.presets if p.id == preset), None)
+                if preset_match and preset_match.estimated_size_bytes:
+                    estimated_total_bytes = preset_match.estimated_size_bytes
+    except Exception as exc:
+        logger.debug("Skipping cached size estimate lookup: %s", exc)
+        estimated_total_bytes = None
 
     def _on_progress(d: dict[str, Any]) -> None:
         now = time.perf_counter()
+        last_hook_ts["ts"] = now
         status = d.get("status")
         if status == "merging":
             snapshot.status = JobStatus.MERGING
@@ -124,24 +156,62 @@ async def download_job_task(
             storage.assert_disk_quota()
 
             snapshot.status = JobStatus.DOWNLOADING
-            snapshot.phase_detail = "Starting extraction..."
+            snapshot.phase_detail = "Starting accelerated extraction..."
             await store.save_job(snapshot)
 
             work_dir = storage.job_work_dir(job_id)
-            artifact = await extractor.download(
-                job_id=job_id,
-                normalized_url=normalized_url,
-                platform=platform,
-                preset=preset,
-                format_id=format_id,
-                audio_format=audio_format,
-                subtitle_lang=subtitle_lang,
-                download_thumbnail=download_thumbnail,
-                playlist_item=playlist_item,
-                work_dir=work_dir,
-                on_progress=_on_progress,
-                is_cancelled=lambda: cancel_flag["cancelled"],
-            )
+
+            async def _watch_disk_progress() -> None:
+                prev_bytes = 0
+                prev_ts = time.perf_counter()
+                while not cancel_flag["cancelled"]:
+                    await asyncio.sleep(0.5)
+                    now_t = time.perf_counter()
+                    # Skip when yt-dlp's native progress hook is actively reporting
+                    if snapshot.status != JobStatus.DOWNLOADING or (now_t - last_hook_ts["ts"]) < 1.2:
+                        continue
+                    try:
+                        written = await asyncio.to_thread(_measure_work_dir_bytes, work_dir)
+                        if written <= prev_bytes:
+                            continue
+                        dt = max(0.1, now_t - prev_ts)
+                        speed = (written - prev_bytes) / dt
+                        prev_bytes = written
+                        prev_ts = now_t
+
+                        snapshot.downloaded_bytes = written
+                        snapshot.speed_bytes_per_sec = speed
+                        if estimated_total_bytes and estimated_total_bytes > 0:
+                            snapshot.total_bytes = max(estimated_total_bytes, written)
+                            snapshot.progress_percent = min(
+                                96.0, round((written / snapshot.total_bytes) * 100.0, 1)
+                            )
+                            if speed > 0:
+                                rem = max(0, snapshot.total_bytes - written)
+                                snapshot.eta_seconds = int(rem / speed)
+                        snapshot.phase_detail = "Downloading media streams (multi-connection)..."
+                        await store.save_job(snapshot)
+                    except OSError:
+                        continue
+
+            disk_progress_watcher = asyncio.create_task(_watch_disk_progress())
+            try:
+                artifact = await extractor.download(
+                    job_id=job_id,
+                    normalized_url=normalized_url,
+                    platform=platform,
+                    preset=preset,
+                    format_id=format_id,
+                    audio_format=audio_format,
+                    subtitle_lang=subtitle_lang,
+                    download_thumbnail=download_thumbnail,
+                    playlist_item=playlist_item,
+                    work_dir=work_dir,
+                    on_progress=_on_progress,
+                    is_cancelled=lambda: cancel_flag["cancelled"],
+                )
+            finally:
+                disk_progress_watcher.cancel()
 
             # Move artifacts atomically from tmpfs/work_dir to final storage directory
             final_dir = storage.job_final_dir(job_id)

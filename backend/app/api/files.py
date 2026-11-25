@@ -21,7 +21,7 @@ from app.services.storage import parse_range_header
 
 router = APIRouter(prefix="/api/v1", tags=["files"])
 
-_STREAM_CHUNK_SIZE = 131_072  # 128 KiB
+_STREAM_CHUNK_SIZE = 524_288  # 512 KiB
 
 
 async def _file_chunk_iterator(path: Path, start: int, length: int, platform: str) -> AsyncIterator[bytes]:

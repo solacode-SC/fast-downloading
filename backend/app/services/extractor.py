@@ -48,6 +48,7 @@ class AttemptPlan:
     use_cookies: bool
     use_impersonate: bool
     skip_webpage: bool = False
+    use_aria2c: bool = True
 
 
 @dataclass
@@ -194,10 +195,22 @@ class MediaExtractor:
                         use_cookies=(cookie_available and idx == len(active_clients) - 1),
                         use_impersonate=(impersonate_default and client in {"web", "mweb", "web_embedded"}),
                         skip_webpage=False,
+                        use_aria2c=(idx == 0),
                     )
                 )
-                # Add a webpage-less InnerTube fallback right after android_vr in case /watch HTML is challenged
+                # Fast native yt-dlp fallback right after aria2c android_vr, plus webpage-less fallback
                 if client == "android_vr" and idx == 0:
+                    if self._settings.enable_aria2c:
+                        plans.append(
+                            AttemptPlan(
+                                player_client="android_vr",
+                                proxy=primary_proxy,
+                                use_cookies=False,
+                                use_impersonate=False,
+                                skip_webpage=False,
+                                use_aria2c=False,
+                            )
+                        )
                     plans.append(
                         AttemptPlan(
                             player_client="android_vr",
@@ -205,6 +218,7 @@ class MediaExtractor:
                             use_cookies=False,
                             use_impersonate=False,
                             skip_webpage=True,
+                            use_aria2c=False,
                         )
                     )
             # Step 2: if backup proxy (or WARP sidecar) exists, retry best clients on backup proxy
@@ -629,6 +643,10 @@ class MediaExtractor:
             else:
                 await jitter_sleep(self._settings.jitter_min_ms, self._settings.jitter_max_ms)
 
+            merger_args = ["-c", "copy"]
+            if fmt_opts.get("merge_output_format") == "mp4":
+                merger_args.extend(["-movflags", "+faststart"])
+
             opts = self._base_ydl_opts(platform, plan)
             opts.update(fmt_opts)
             opts.update(
@@ -639,7 +657,7 @@ class MediaExtractor:
                     "max_filesize": self._settings.max_filesize_bytes,
                     # Ensure ffmpeg uses stream copy when merging video+audio (never re-encode)
                     "postprocessor_args": {
-                        "Merger+ffmpeg": ["-c", "copy", "-movflags", "+faststart"],
+                        "Merger+ffmpeg": merger_args,
                     },
                 }
             )
@@ -659,17 +677,34 @@ class MediaExtractor:
             if download_thumbnail:
                 opts["writethumbnail"] = True
 
-            # Optional aria2c accelerator for direct-HTTP formats (not used with cookies/impersonate mismatch)
-            if self._settings.enable_aria2c and is_aria2c_available() and not plan.use_impersonate:
-                opts["external_downloader"] = {"default": "aria2c"}
-                opts["external_downloader_args"] = {
-                    "aria2c": [
-                        f"-x{self._settings.aria2c_connections}",
-                        f"-s{self._settings.aria2c_splits}",
-                        f"-k{self._settings.aria2c_min_split_size}",
-                        "--summary-interval=1",
-                    ]
-                }
+            # Multi-connection aria2c accelerator for direct HTTP/HTTPS streams (e.g. YouTube DASH).
+            # Leaves HLS/DASH manifests on yt-dlp's native concurrent fragment downloader,
+            # and skips aria2c when using SOCKS proxies, cookies, or TLS impersonation.
+            proxy_is_socks = plan.proxy is not None and plan.proxy.url.lower().startswith("socks")
+            if (
+                self._settings.enable_aria2c
+                and plan.use_aria2c
+                and is_aria2c_available()
+                and not plan.use_impersonate
+                and not plan.use_cookies
+                and not proxy_is_socks
+            ):
+                aria_args = [
+                    f"-x{self._settings.aria2c_connections}",
+                    f"-s{self._settings.aria2c_splits}",
+                    f"-k{self._settings.aria2c_min_split_size}",
+                    "--file-allocation=none",
+                    "--optimize-concurrent-downloads=true",
+                    "--max-tries=5",
+                    "--retry-wait=1",
+                    "--allow-overwrite=true",
+                    "--auto-file-renaming=false",
+                    "--summary-interval=1",
+                ]
+                if self._settings.ytdlp_force_ipv4:
+                    aria_args.append("--disable-ipv6=true")
+                opts["external_downloader"] = {"http": "aria2c", "https": "aria2c"}
+                opts["external_downloader_args"] = {"aria2c": aria_args}
 
             def _progress_hook(d: dict[str, Any]) -> None:
                 if is_cancelled():

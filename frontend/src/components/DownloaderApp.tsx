@@ -10,6 +10,7 @@ import {
   resolveUrl,
   subscribeJobEvents,
   type JobSnapshot,
+  type Platform,
   type Preset,
   type ResolveResponse,
 } from "@/lib/api";
@@ -17,12 +18,55 @@ import { formatDuration, formatSpeed } from "@/lib/format";
 import { addHistoryItem, clearHistory, loadHistory, type HistoryItem } from "@/lib/history";
 import { useI18n } from "@/lib/i18n";
 import { detectClientPlatform, extractSharedUrl, PLATFORM_META } from "@/lib/platform";
+import { trackUmamiEvent } from "@/lib/umami";
 import { FormatPicker } from "./FormatPicker";
 import { HistoryDrawer } from "./HistoryDrawer";
 import { ProgressCard } from "./ProgressCard";
 import { ToastContainer, type ToastMessage } from "./ToastContainer";
 
-export function DownloaderApp() {
+const PLATFORM_ROUTES: Record<Platform, string> = {
+  youtube: "/youtube-downloader",
+  x: "/twitter-video-downloader",
+  instagram: "/instagram-downloader",
+  facebook: "/facebook-downloader",
+};
+
+const TERMINAL_JOB_STATUSES = new Set<JobSnapshot["status"]>(["ready", "failed", "cancelled"]);
+
+function extractCleanUrl(raw: string): string {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+  return match ? match[0] : trimmed;
+}
+
+function triggerBrowserFileDownload(downloadUrl: string, filename?: string | null): void {
+  const anchor = document.createElement("a");
+  anchor.href = downloadUrl;
+  if (filename) anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+export interface DownloaderAppProps {
+  initialPlatform?: Platform;
+  heroOverride?: {
+    pill?: string;
+    titleLine1?: string;
+    titleLine2?: string;
+    subtitle?: string;
+    techSub?: string;
+    placeholder?: string;
+  };
+  hideHomeFaq?: boolean;
+}
+
+export function DownloaderApp({
+  initialPlatform,
+  heroOverride,
+  hideHomeFaq = false,
+}: DownloaderAppProps = {}) {
   const { locale, t } = useI18n();
   const [urlInput, setUrlInput] = React.useState("");
   const [resolving, setResolving] = React.useState(false);
@@ -33,8 +77,17 @@ export function DownloaderApp() {
   const [history, setHistory] = React.useState<HistoryItem[]>([]);
   const [toasts, setToasts] = React.useState<ToastMessage[]>([]);
 
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
   const unsubscribeRef = React.useRef<(() => void) | null>(null);
-  const autoDownloadedJobRef = React.useRef<string | null>(null);
+  const resolveAbortRef = React.useRef<AbortController | null>(null);
+  const resolveReqIdRef = React.useRef(0);
+  const inFlightResolveRef = React.useRef<{
+    url: string;
+    promise: Promise<ResolveResponse | null>;
+  } | null>(null);
+  const downloadRunIdRef = React.useRef(0);
+  const autoDownloadedRunRef = React.useRef<number | null>(null);
+
   const [lastDownloadOpts, setLastDownloadOpts] = React.useState<{
     preset?: Preset;
     formatId?: string | null;
@@ -56,6 +109,9 @@ export function DownloaderApp() {
 
   const pushApiError = React.useCallback(
     (err: unknown) => {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       if (err instanceof ApiClientError) {
         const msgKey = `err_${err.detail.code}_msg`;
         const hintKey = `err_${err.detail.code}_hint`;
@@ -73,66 +129,133 @@ export function DownloaderApp() {
     setToasts((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
+  const handleReadySnapshot = React.useCallback(
+    (snap: JobSnapshot, resolvedMedia: ResolveResponse, runId: number) => {
+      if (snap.status !== "ready" || !snap.download_url) return;
+      setHistory(
+        addHistoryItem({
+          id: snap.job_id,
+          url: resolvedMedia.normalized_url,
+          platform: snap.platform,
+          title: snap.title || resolvedMedia.title,
+          thumbnailUrl: snap.thumbnail_url || resolvedMedia.thumbnail_url,
+          filename: snap.filename,
+          filesizeBytes: snap.filesize_bytes,
+          createdAt: Date.now(),
+        })
+      );
+      if (autoDownloadedRunRef.current !== runId) {
+        autoDownloadedRunRef.current = runId;
+        trackUmamiEvent("download_ready", { platform: snap.platform });
+        triggerBrowserFileDownload(snap.download_url, snap.filename);
+      }
+    },
+    []
+  );
+
   const attachJobStream = React.useCallback(
-    (jobId: string, resolvedMedia: ResolveResponse) => {
+    (jobId: string, resolvedMedia: ResolveResponse, runId: number) => {
       unsubscribeRef.current?.();
       unsubscribeRef.current = subscribeJobEvents(
         jobId,
         (snap) => {
+          if (downloadRunIdRef.current !== runId) return;
           setActiveJob(snap);
           if (snap.status === "ready" && snap.download_url) {
-            setHistory(
-              addHistoryItem({
-                id: snap.job_id,
-                url: resolvedMedia.normalized_url,
-                platform: snap.platform,
-                title: snap.title || resolvedMedia.title,
-                thumbnailUrl: snap.thumbnail_url || resolvedMedia.thumbnail_url,
-                filename: snap.filename,
-                filesizeBytes: snap.filesize_bytes,
-                createdAt: Date.now(),
-              })
-            );
-            if (autoDownloadedJobRef.current !== snap.job_id) {
-              autoDownloadedJobRef.current = snap.job_id;
-              const anchor = document.createElement("a");
-              anchor.href = snap.download_url;
-              if (snap.filename) anchor.download = snap.filename;
-              anchor.rel = "noopener";
-              document.body.appendChild(anchor);
-              anchor.click();
-              anchor.remove();
-            }
+            handleReadySnapshot(snap, resolvedMedia, runId);
           }
         },
         () => {
+          if (downloadRunIdRef.current !== runId) return;
           void fetchJobSnapshot(jobId)
-            .then((snap) => setActiveJob(snap))
+            .then((snap) => {
+              if (downloadRunIdRef.current !== runId) return;
+              setActiveJob(snap);
+              if (snap.status === "ready" && snap.download_url) {
+                handleReadySnapshot(snap, resolvedMedia, runId);
+              }
+            })
             .catch(() => pushToast(t("err_NETWORK_msg"), t("err_NETWORK_hint"), "error"));
         }
       );
     },
-    [pushToast, t]
+    [handleReadySnapshot, pushToast, t]
   );
+
+  const clearTerminalJobIfAny = React.useCallback(() => {
+    setActiveJob((prev) => {
+      if (!prev || TERMINAL_JOB_STATUSES.has(prev.status)) {
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        return null;
+      }
+      return prev;
+    });
+  }, []);
+
+  const resetForNewDownload = React.useCallback((focusInput = true) => {
+    resolveAbortRef.current?.abort();
+    resolveAbortRef.current = null;
+    inFlightResolveRef.current = null;
+    resolveReqIdRef.current += 1;
+    downloadRunIdRef.current += 1;
+    autoDownloadedRunRef.current = null;
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    setResolving(false);
+    setStartingJob(false);
+    setQuickDownloading(false);
+    setUrlInput("");
+    setMedia(null);
+    setActiveJob(null);
+    setLastDownloadOpts(null);
+    if (focusInput) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setTimeout(() => inputRef.current?.focus(), 60);
+    }
+  }, []);
 
   const handleResolve = React.useCallback(
     async (targetUrl?: string): Promise<ResolveResponse | null> => {
-      const candidate = (targetUrl ?? urlInput).trim();
+      const candidate = extractCleanUrl(targetUrl ?? urlInput);
       if (!candidate) return null;
+
+      // Abort any previous in-flight resolve so stale responses never overwrite the new link
+      resolveAbortRef.current?.abort();
+      const controller = new AbortController();
+      resolveAbortRef.current = controller;
+      const reqId = ++resolveReqIdRef.current;
+
       setResolving(true);
       setMedia(null);
-      try {
-        const result = await resolveUrl(candidate);
-        setMedia(result);
-        return result;
-      } catch (err) {
-        pushApiError(err);
-        return null;
-      } finally {
-        setResolving(false);
-      }
+      setLastDownloadOpts(null);
+      clearTerminalJobIfAny();
+
+      const promise = (async (): Promise<ResolveResponse | null> => {
+        try {
+          const result = await resolveUrl(candidate, controller.signal);
+          if (reqId !== resolveReqIdRef.current) return null;
+          setMedia(result);
+          trackUmamiEvent("resolve_success", { platform: result.platform });
+          return result;
+        } catch (err) {
+          if (reqId !== resolveReqIdRef.current) return null;
+          pushApiError(err);
+          return null;
+        } finally {
+          if (reqId === resolveReqIdRef.current) {
+            setResolving(false);
+            if (inFlightResolveRef.current?.url === candidate) {
+              inFlightResolveRef.current = null;
+            }
+          }
+        }
+      })();
+
+      inFlightResolveRef.current = { url: candidate, promise };
+      return promise;
     },
-    [urlInput, pushApiError]
+    [urlInput, pushApiError, clearTerminalJobIfAny]
   );
 
   const startJobForMedia = React.useCallback(
@@ -146,9 +269,46 @@ export function DownloaderApp() {
         playlistItem?: number | null;
       }
     ) => {
+      const runId = ++downloadRunIdRef.current;
+      autoDownloadedRunRef.current = null;
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+
       setLastDownloadOpts(opts);
       setStartingJob(true);
+      setActiveJob({
+        job_id: `pending-${runId}`,
+        platform: targetMedia.platform,
+        url: targetMedia.normalized_url,
+        title: targetMedia.title,
+        thumbnail_url: targetMedia.thumbnail_url,
+        status: "queued",
+        progress_percent: 0,
+        downloaded_bytes: 0,
+        total_bytes: null,
+        speed_bytes_per_sec: null,
+        eta_seconds: null,
+        phase_detail: "Starting download...",
+        download_token: null,
+        download_url: null,
+        filename: null,
+        mime_type: null,
+        filesize_bytes: null,
+        subtitle_token: null,
+        subtitle_url: null,
+        thumbnail_token: null,
+        thumbnail_url_download: null,
+        error: null,
+        created_at: Date.now() / 1000,
+        updated_at: Date.now() / 1000,
+        expires_at: null,
+      });
+
       try {
+        trackUmamiEvent("download_started", {
+          platform: targetMedia.platform,
+          preset: opts.preset ?? opts.formatId ?? "custom",
+        });
         const created = await createDownloadJob({
           url: targetMedia.normalized_url,
           preset: opts.preset,
@@ -157,27 +317,49 @@ export function DownloaderApp() {
           download_thumbnail: opts.downloadThumbnail,
           playlist_item: opts.playlistItem ?? null,
         });
+        if (downloadRunIdRef.current !== runId) return;
+
         const initialSnap = await fetchJobSnapshot(created.job_id);
+        if (downloadRunIdRef.current !== runId) return;
+
         setActiveJob(initialSnap);
-        attachJobStream(created.job_id, targetMedia);
+        if (initialSnap.status === "ready" && initialSnap.download_url) {
+          handleReadySnapshot(initialSnap, targetMedia, runId);
+        } else if (!TERMINAL_JOB_STATUSES.has(initialSnap.status)) {
+          attachJobStream(created.job_id, targetMedia, runId);
+        }
       } catch (err) {
-        pushApiError(err);
+        if (downloadRunIdRef.current === runId) {
+          setActiveJob(null);
+          pushApiError(err);
+        }
       } finally {
-        setStartingJob(false);
+        if (downloadRunIdRef.current === runId) {
+          setStartingJob(false);
+        }
       }
     },
-    [attachJobStream, pushApiError]
+    [attachJobStream, handleReadySnapshot, pushApiError]
   );
 
   const handleQuickDownload = async () => {
-    const candidate = urlInput.trim();
+    const candidate = extractCleanUrl(urlInput);
     if (!candidate) return;
+    if (candidate !== urlInput) {
+      setUrlInput(candidate);
+    }
     setQuickDownloading(true);
     try {
-      const resolved =
-        media && (media.url === candidate || media.normalized_url === candidate)
-          ? media
-          : await handleResolve(candidate);
+      let resolved: ResolveResponse | null = null;
+      if (media && (media.url === candidate || media.normalized_url === candidate)) {
+        resolved = media;
+      } else if (inFlightResolveRef.current && inFlightResolveRef.current.url === candidate) {
+        // Reuse the in-flight resolve triggered by paste instead of duplicating or blocking
+        resolved = await inFlightResolveRef.current.promise;
+      } else {
+        resolved = await handleResolve(candidate);
+      }
+
       if (resolved) {
         await startJobForMedia(resolved, {
           preset: "best",
@@ -204,20 +386,63 @@ export function DownloaderApp() {
       }
     });
     return () => {
+      resolveAbortRef.current?.abort();
       unsubscribeRef.current?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handlePaste = async () => {
+  const applyPastedText = React.useCallback(
+    (rawText: string) => {
+      const cleaned = extractCleanUrl(rawText);
+      if (!cleaned) return;
+      // Clear any previous completed/failed job and stale media immediately so pasting a 2nd link always works cleanly
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      setActiveJob(null);
+      setMedia(null);
+      setLastDownloadOpts(null);
+      autoDownloadedRunRef.current = null;
+      setUrlInput(cleaned);
+      void handleResolve(cleaned);
+    },
+    [handleResolve]
+  );
+
+  const handlePasteButton = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        setUrlInput(text.trim());
-        void handleResolve(text.trim());
+      if (text && text.trim()) {
+        applyPastedText(text);
       }
     } catch {
+      inputRef.current?.focus();
+      inputRef.current?.select();
       pushToast(t("paste"), "Ctrl+V / Cmd+V", "info");
+    }
+  };
+
+  const handleInputPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted || !pasted.trim()) return;
+    // Always replace existing URL instead of concatenating onto the previous video link
+    e.preventDefault();
+    applyPastedText(pasted);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextVal = e.target.value;
+    setUrlInput(nextVal);
+    const trimmed = nextVal.trim();
+    // Immediately invalidate stale media & finished job when the URL changes so the user never downloads the previous video
+    if (media && trimmed !== media.url && trimmed !== media.normalized_url) {
+      setMedia(null);
+      setLastDownloadOpts(null);
+      clearTerminalJobIfAny();
+    } else if (!trimmed) {
+      setMedia(null);
+      setLastDownloadOpts(null);
+      clearTerminalJobIfAny();
     }
   };
 
@@ -235,6 +460,13 @@ export function DownloaderApp() {
   const handleCancelJob = async () => {
     if (!activeJob) return;
     unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    if (activeJob.job_id.startsWith("pending-")) {
+      downloadRunIdRef.current += 1;
+      setActiveJob(null);
+      setStartingJob(false);
+      return;
+    }
     try {
       await cancelDownloadJob(activeJob.job_id);
       setActiveJob((prev) => (prev ? { ...prev, status: "cancelled" } : null));
@@ -244,7 +476,7 @@ export function DownloaderApp() {
   };
 
   const detectedPlatform = detectClientPlatform(urlInput);
-  const currentPlatKey = media?.platform ?? detectedPlatform;
+  const currentPlatKey = media?.platform ?? detectedPlatform ?? initialPlatform ?? null;
   const localizedPlatName = currentPlatKey
     ? t(`platform_${currentPlatKey}_name`)
     : t("codeAutoDetect");
@@ -255,6 +487,13 @@ export function DownloaderApp() {
   const speedSummary = activeJob?.speed_bytes_per_sec
     ? formatSpeed(activeJob.speed_bytes_per_sec)
     : t("codeDefaultSpeed");
+
+  const heroPillText = heroOverride?.pill ?? t("heroPill");
+  const heroLine1 = heroOverride?.titleLine1 ?? t("heroTitleLine1");
+  const heroLine2 = heroOverride?.titleLine2 ?? t("heroTitleLine2");
+  const heroSubtitleText = heroOverride?.subtitle ?? t("subtitle");
+  const heroTechSubText = heroOverride?.techSub ?? t("heroTechSub");
+  const heroPlaceholder = heroOverride?.placeholder ?? t("urlPlaceholder");
 
   return (
     <div className="flex min-h-[calc(100vh-56px)] w-full flex-col">
@@ -269,7 +508,7 @@ export function DownloaderApp() {
         <div className="bg-grid-paper flex flex-col justify-between border-b-2 border-black p-4 sm:p-8 md:p-10 lg:col-span-7 lg:border-b-0 lg:border-e-2 xl:p-14">
           <div className="space-y-4 sm:space-y-5 xl:space-y-6">
             <div className="inline-flex max-w-full items-center gap-2 border-2 border-black bg-brutal-purple px-3 py-1 font-mono text-[11px] font-black uppercase leading-snug tracking-wider text-white shadow-brutal-sm sm:text-xs">
-              <span className="break-words">{t("heroPill")}</span>
+              <span className="break-words">{heroPillText}</span>
             </div>
 
             <h1
@@ -277,13 +516,13 @@ export function DownloaderApp() {
                 locale === "ar" ? "leading-[1.32]" : "leading-[1.06]"
               }`}
             >
-              {t("heroTitleLine1")}
+              {heroLine1}
               <br />
-              {t("heroTitleLine2")}
+              {heroLine2}
             </h1>
 
             <p className="max-w-2xl font-mono text-xs leading-relaxed text-zinc-700 sm:text-sm md:text-base dark:text-zinc-300">
-              {t("subtitle")} {t("heroTechSub")}
+              {heroSubtitleText} {heroTechSubText}
             </p>
 
             {/* Full-Width Responsive URL Input Form */}
@@ -308,6 +547,7 @@ export function DownloaderApp() {
                     </span>
                   )}
                   <input
+                    ref={inputRef}
                     id="video-url-input"
                     type="url"
                     dir="ltr"
@@ -316,31 +556,35 @@ export function DownloaderApp() {
                     spellCheck={false}
                     required
                     value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder={t("urlPlaceholder")}
+                    onChange={handleInputChange}
+                    onPaste={handleInputPaste}
+                    onFocus={(e) => {
+                      if (e.currentTarget.value) {
+                        e.currentTarget.select();
+                      }
+                    }}
+                    placeholder={heroPlaceholder}
                     className="min-w-0 flex-1 bg-transparent px-3.5 py-3.5 text-left font-mono text-xs font-bold text-black placeholder:text-zinc-400 focus:outline-none sm:py-4 sm:text-sm dark:text-zinc-100"
                   />
                 </div>
-                {urlInput ? (
+                <div className="flex shrink-0 items-stretch border-t-2 border-black sm:border-s-2 sm:border-t-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      setUrlInput("");
-                      setMedia(null);
-                    }}
-                    className="shrink-0 border-t-2 border-black bg-zinc-100 px-4 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-pink sm:border-s-2 sm:border-t-0"
-                  >
-                    {t("clear")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handlePaste()}
-                    className="shrink-0 border-t-2 border-black bg-brutal-pink px-5 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-lime sm:border-s-2 sm:border-t-0"
+                    onClick={() => void handlePasteButton()}
+                    className="flex-1 bg-brutal-pink px-4 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-lime sm:flex-none sm:px-5"
                   >
                     {t("paste")}
                   </button>
-                )}
+                  {urlInput && (
+                    <button
+                      type="button"
+                      onClick={() => resetForNewDownload(true)}
+                      className="flex-1 border-s-2 border-black bg-zinc-100 px-4 py-2.5 font-mono text-xs font-black uppercase text-black transition hover:bg-brutal-pink sm:flex-none"
+                    >
+                      {t("clear")}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Balanced 2-Column Hero CTA Buttons */}
@@ -355,33 +599,31 @@ export function DownloaderApp() {
 
                 <button
                   type="button"
-                  disabled={resolving || quickDownloading || !urlInput.trim()}
+                  disabled={quickDownloading || startingJob || !urlInput.trim()}
                   onClick={() => void handleQuickDownload()}
                   className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 border-2 border-black bg-white px-4 py-3 text-center font-mono text-xs font-black uppercase tracking-wider text-black shadow-brutal transition hover:translate-y-[2px] hover:bg-brutal-pink hover:shadow-brutal-sm disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:text-sm ltr:hover:translate-x-[2px] rtl:hover:-translate-x-[2px]"
                 >
-                  <span>{quickDownloading ? t("starting") : t("quickDownloadBtn")}</span>
+                  <span>
+                    {quickDownloading || startingJob ? t("starting") : t("quickDownloadBtn")}
+                  </span>
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Bottom-left Platform Badges */}
+          {/* Bottom-left Platform Badges (Internal SEO Links) */}
           <div className="mt-7 space-y-2.5 sm:mt-8">
             <p className="font-mono text-[11px] font-black uppercase tracking-widest text-zinc-600 sm:text-xs dark:text-zinc-400">
               {t("supportedPlatformsLabel")}
             </p>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
               {(["youtube", "x", "instagram", "facebook"] as const).map((p) => {
-                const active = detectedPlatform === p;
+                const active = (detectedPlatform ?? initialPlatform) === p;
                 return (
-                  <button
+                  <Link
                     key={p}
-                    type="button"
-                    onClick={() => {
-                      const inputEl = document.getElementById("video-url-input");
-                      inputEl?.focus();
-                    }}
-                    title={t(`platform_${p}_name`)}
+                    href={PLATFORM_ROUTES[p]}
+                    title={`${t(`platform_${p}_name`)} Video Downloader`}
                     className={`flex h-10 items-center justify-center gap-1.5 border-2 border-black px-3 font-mono text-xs font-black shadow-brutal-sm transition sm:h-11 ${
                       active ? "bg-brutal-lime text-black" : "bg-white text-black hover:bg-zinc-50"
                     }`}
@@ -393,7 +635,7 @@ export function DownloaderApp() {
                       {PLATFORM_META[p].code}
                     </span>
                     <span>{t(`platform_${p}_name`)}</span>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -450,7 +692,7 @@ export function DownloaderApp() {
             </div>
           </div>
 
-          {/* Structured Multi-Language Safe Live Telemetry Card (replaces BiDi-fragile code string) */}
+          {/* Structured Multi-Language Safe Live Telemetry Card */}
           <div className="relative z-10 -mt-5 w-full max-w-sm border-2 border-black bg-brutal-purple text-white shadow-brutal sm:ms-auto sm:max-w-sm">
             <div
               dir="ltr"
@@ -461,7 +703,7 @@ export function DownloaderApp() {
                 <span className="inline-block h-2 w-2 bg-brutal-lime" />
                 <span>FASTDL // TELEMETRY</span>
               </span>
-              <span>v1.0</span>
+              <span>v1.1</span>
             </div>
             <dl className="divide-y divide-white/20 px-3.5 py-2 font-mono text-[11px] sm:text-xs">
               <div className="flex items-center justify-between gap-3 py-1.5">
@@ -494,7 +736,7 @@ export function DownloaderApp() {
       </section>
 
       {/* =================================================================
-          2. FULL-WIDTH HORIZONTAL PLATFORMS STRIP (RTL-Safe Borders)
+          2. FULL-WIDTH HORIZONTAL PLATFORMS STRIP (Internal SEO Links)
          ================================================================= */}
       <section
         id="platforms-strip"
@@ -512,9 +754,10 @@ export function DownloaderApp() {
           {(["youtube", "x", "instagram", "facebook"] as const).map((p, idx) => {
             const meta = PLATFORM_META[p];
             return (
-              <div
+              <Link
                 key={p}
-                className={`flex flex-col items-center justify-center gap-1.5 border-black p-4 text-center lg:py-6 ${
+                href={PLATFORM_ROUTES[p]}
+                className={`flex flex-col items-center justify-center gap-1.5 border-black p-4 text-center transition hover:bg-brutal-lime/25 lg:py-6 ${
                   idx < 2 ? "border-b-2 sm:border-b-0" : ""
                 } ${idx % 2 === 0 ? "border-e-2 sm:border-e-0" : ""} ${
                   idx > 0 ? "sm:border-s-2" : ""
@@ -532,7 +775,7 @@ export function DownloaderApp() {
                 <span className="font-mono text-[11px] text-zinc-600 sm:text-xs dark:text-zinc-400">
                   {t(`platform_${p}_spec`)}
                 </span>
-              </div>
+              </Link>
             );
           })}
         </div>
@@ -569,6 +812,7 @@ export function DownloaderApp() {
               onRetry={
                 lastDownloadOpts ? () => void handleStartDownload(lastDownloadOpts) : undefined
               }
+              onNewDownload={() => resetForNewDownload(true)}
             />
           )}
 
@@ -630,6 +874,7 @@ export function DownloaderApp() {
 
               <div className="p-4 sm:p-6 xl:p-8">
                 <FormatPicker
+                  key={media.normalized_url}
                   media={media}
                   busy={startingJob}
                   onStartDownload={(opts) => void handleStartDownload(opts)}
@@ -682,8 +927,8 @@ export function DownloaderApp() {
           <HistoryDrawer
             items={history}
             onSelectUrl={(u) => {
-              setUrlInput(u);
-              void handleResolve(u);
+              applyPastedText(u);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             onClear={() => {
               clearHistory();
@@ -793,6 +1038,68 @@ export function DownloaderApp() {
           </div>
         </div>
       </section>
+
+      {/* =================================================================
+          5. SEO & GEO KNOWLEDGE + FAQ SECTION (Home Page)
+         ================================================================= */}
+      {!hideHomeFaq && (
+        <section
+          id="faq-section"
+          aria-label="Frequently asked questions and supported features"
+          className="grid w-full grid-cols-1 border-b-2 border-black bg-white lg:grid-cols-12 dark:bg-[#12121A]"
+        >
+          <div className="border-b-2 border-black bg-brutal-lime p-5 sm:p-8 lg:col-span-4 lg:border-b-0 lg:border-e-2 xl:p-12">
+            <span className="inline-block border-2 border-black bg-black px-2.5 py-1 font-mono text-[11px] font-black uppercase text-brutal-lime">
+              {t("faqBadge")}
+            </span>
+            <h2 className="mt-4 font-sans text-2xl font-black uppercase leading-tight text-black sm:text-3xl">
+              {t("faqSectionTitle")}
+            </h2>
+            <p className="mt-3 font-mono text-xs leading-relaxed text-black/85 sm:text-sm">
+              {t("faqSectionDesc")}
+            </p>
+            <div className="mt-6 space-y-2">
+              <p className="font-mono text-[11px] font-black uppercase tracking-wider text-black">
+                {t("dedicatedToolsLabel")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(["youtube", "x", "instagram", "facebook"] as const).map((p) => (
+                  <Link
+                    key={p}
+                    href={PLATFORM_ROUTES[p]}
+                    className="border-2 border-black bg-white px-3 py-1.5 font-mono text-xs font-black uppercase text-black shadow-brutal-sm transition hover:bg-brutal-pink"
+                  >
+                    {t(`platform_${p}_name`)} →
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y-2 divide-black lg:col-span-8">
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <details
+                key={n}
+                open={n <= 2}
+                className="group bg-white p-5 transition open:bg-zinc-50 sm:p-6 dark:bg-[#16161F] dark:open:bg-zinc-900"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-sans text-sm font-black uppercase text-black sm:text-base dark:text-zinc-100">
+                  <span>{t(`faq${n}Q`)}</span>
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center border-2 border-black bg-brutal-pink font-mono text-xs font-black text-black transition group-open:rotate-45 group-open:bg-brutal-lime"
+                  >
+                    +
+                  </span>
+                </summary>
+                <p className="mt-3 font-mono text-xs leading-relaxed text-zinc-700 sm:text-sm dark:text-zinc-300">
+                  {t(`faq${n}A`)}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>

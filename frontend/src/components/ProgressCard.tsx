@@ -9,9 +9,10 @@ interface ProgressCardProps {
   job: JobSnapshot;
   onCancel: () => void;
   onRetry?: () => void;
+  onNewDownload?: () => void;
 }
 
-export function ProgressCard({ job, onCancel, onRetry }: ProgressCardProps) {
+export function ProgressCard({ job, onCancel, onRetry, onNewDownload }: ProgressCardProps) {
   const { t } = useI18n();
 
   const statusText: Record<JobSnapshot["status"], string> = {
@@ -227,6 +228,30 @@ export function ProgressCard({ job, onCancel, onRetry }: ProgressCardProps) {
                 {t("downloadThumb")} ↓
               </a>
             )}
+
+            {onNewDownload && (
+              <button
+                type="button"
+                onClick={onNewDownload}
+                className="inline-flex items-center gap-1.5 border-2 border-black bg-brutal-purple px-4 py-2.5 font-mono text-xs font-black uppercase tracking-wider text-white shadow-brutal-sm transition hover:bg-[#684de6]"
+              >
+                <span>{t("downloadAnother")}</span>
+                <span aria-hidden="true">+</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {(job.status === "failed" || job.status === "cancelled") && onNewDownload && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={onNewDownload}
+              className="inline-flex items-center gap-1.5 border-2 border-black bg-white px-3.5 py-1.5 font-mono text-xs font-black uppercase text-black shadow-brutal-sm transition hover:bg-brutal-lime"
+            >
+              <span>{t("downloadAnother")}</span>
+              <span aria-hidden="true">+</span>
+            </button>
           </div>
         )}
       </div>
